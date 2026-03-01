@@ -12,7 +12,7 @@ Completer<void>? _loadCompleter;
 const String _dexieScriptAssetPath =
     'assets/packages/dexie_web/assets/dexie.min.js';
 const String _dexieSourceMarkerKey = '__dexie_web_source';
-const String _dexieHashMarkerKey = '__dexie_web_sha384';
+const String _dexieIntegrityMarkerKey = '__dexie_web_integrity';
 const String _dexieSourceMarkerValue = 'dexie_web';
 
 enum DexieLoadPolicy {
@@ -47,10 +47,10 @@ Future<void> ensureDexieInitialized({DexieLoadPolicy? policy}) async {
   if (_dexieLoaded) {
     final hasDexieGlobal = _dexieConstructor != null;
     final sourceMarker = _readGlobalString(_dexieSourceMarkerKey);
-    final hashMarker = _readGlobalString(_dexieHashMarkerKey);
+    final integrityMarker = _readGlobalString(_dexieIntegrityMarkerKey);
     final markerMatches =
         sourceMarker == _dexieSourceMarkerValue &&
-        hashMarker == dexieScriptSha384Base64;
+        integrityMarker == dexieScriptIntegrity;
     switch (effectivePolicy) {
       case DexieLoadPolicy.strictPackage:
         if (hasDexieGlobal && markerMatches) {
@@ -94,10 +94,10 @@ Future<void> ensureDexieInitialized({DexieLoadPolicy? policy}) async {
   try {
     final hasDexieGlobal = _dexieConstructor != null;
     final sourceMarker = _readGlobalString(_dexieSourceMarkerKey);
-    final hashMarker = _readGlobalString(_dexieHashMarkerKey);
+    final integrityMarker = _readGlobalString(_dexieIntegrityMarkerKey);
     final markerMatches =
         sourceMarker == _dexieSourceMarkerValue &&
-        hashMarker == dexieScriptSha384Base64;
+        integrityMarker == dexieScriptIntegrity;
 
     if (hasDexieGlobal) {
       switch (effectivePolicy) {
@@ -141,6 +141,8 @@ Future<void> ensureDexieInitialized({DexieLoadPolicy? policy}) async {
       return completer.future;
     }
 
+    _removeDexieScriptElements();
+
     final script = web.HTMLScriptElement()
       ..src = scriptSrc
       ..integrity = dexieScriptIntegrity
@@ -150,7 +152,7 @@ Future<void> ensureDexieInitialized({DexieLoadPolicy? policy}) async {
     script.onload = ((web.Event _) {
       if (_dexieConstructor != null) {
         _writeGlobalString(_dexieSourceMarkerKey, _dexieSourceMarkerValue);
-        _writeGlobalString(_dexieHashMarkerKey, dexieScriptSha384Base64);
+        _writeGlobalString(_dexieIntegrityMarkerKey, dexieScriptIntegrity);
         _dexieLoaded = true;
         _loadCompleter = null;
         if (!completer.isCompleted) {
@@ -169,6 +171,8 @@ Future<void> ensureDexieInitialized({DexieLoadPolicy? policy}) async {
     }).toJS;
 
     script.onerror = ((web.Event _) {
+      _dexieLoaded = false;
+      script.remove();
       if (!completer.isCompleted) {
         completer.completeError(
           StateError('Failed to load Dexie.js from package asset: $scriptSrc'),
@@ -187,6 +191,17 @@ Future<void> ensureDexieInitialized({DexieLoadPolicy? policy}) async {
   await completer.future;
 }
 
+void _removeDexieScriptElements() {
+  final scripts = web.document.querySelectorAll('script[src*="dexie.min.js"]');
+  final length = scripts.length;
+  for (var i = 0; i < length; i++) {
+    final script = scripts.item(i);
+    if (script is web.HTMLScriptElement) {
+      script.remove();
+    }
+  }
+}
+
 String _resolveDexieScriptSrc() {
   try {
     final base = web.document.baseURI;
@@ -198,11 +213,11 @@ String _resolveDexieScriptSrc() {
 
 void _validateDexieSriConstants() {
   final valid = RegExp(
-    r'^[A-Za-z0-9+/]{64}$',
-  ).hasMatch(dexieScriptSha384Base64);
+    r'^sha384-[A-Za-z0-9+/]{64}$',
+  ).hasMatch(dexieScriptIntegrity);
   if (!valid) {
     throw StateError(
-      'Invalid dexieScriptSha384Base64 format. Expected base64-encoded SHA-384 digest.',
+      'Invalid dexieScriptIntegrity format. Expected sha384-<base64 SHA-384 digest>.',
     );
   }
 }
@@ -242,7 +257,7 @@ JSAny? _dartToJs(dynamic value) {
     return value.toJS;
   }
   if (value is DateTime) {
-    return value.toIso8601String().toJS;
+    return _JsDate(value.millisecondsSinceEpoch.toJS);
   }
   if (value is Map) {
     final obj = JSObject();
@@ -267,6 +282,18 @@ JSAny? _dartToJs(dynamic value) {
 dynamic _jsToDart(JSAny? value) {
   if (value == null) {
     return null;
+  }
+  if (_isJsDate(value)) {
+    final epochMillisAny = (value as JSObject).callMethodVarArgs<JSAny?>(
+      'getTime'.toJS,
+      const [],
+    );
+    if (epochMillisAny is JSNumber) {
+      return DateTime.fromMillisecondsSinceEpoch(
+        epochMillisAny.toDartDouble.round(),
+        isUtc: true,
+      );
+    }
   }
   if (_isJsArray(value)) {
     final array = value as JSArray<JSAny?>;
@@ -297,6 +324,16 @@ external JSArray<JSString> _objectKeys(JSObject object);
 external JSBoolean _arrayIsArray(JSAny? value);
 
 bool _isJsArray(JSAny? value) => _arrayIsArray(value).toDart;
+
+@JS('Object.prototype.toString.call')
+external JSString _objectTypeTag(JSAny? value);
+
+bool _isJsDate(JSAny? value) => _objectTypeTag(value).toDart == '[object Date]';
+
+@JS('Date')
+extension type _JsDate._(JSObject _) implements JSObject {
+  external factory _JsDate(JSNumber epochMillis);
+}
 
 @JS('Dexie')
 extension type Dexie._(JSObject _) implements JSObject {
@@ -343,7 +380,11 @@ class DexieDatabase extends stub.DexieDatabase {
     await ensureDexieInitialized();
 
     final db = Dexie(name.toJS);
-    db.version(1.toJS).stores((schema.jsify() as JSObject?) ?? JSObject());
+    final jsSchema = _dartToJs(schema);
+    if (jsSchema is! JSObject) {
+      throw StateError('Failed to convert schema to a JS object.');
+    }
+    db.version(1.toJS).stores(jsSchema);
     await db.open().toDart;
     _db = db;
   }

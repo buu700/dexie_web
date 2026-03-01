@@ -37,6 +37,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  crypto: ^3.0.6
   patrol: ^4.1.0
 
 # For information on the generic Dart part of this file, see the

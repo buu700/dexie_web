@@ -107,6 +107,11 @@ just e2e
 `flutter test --platform=chrome` does not serve package assets, so real loader
 validation (script path + SRI) is covered by Patrol E2E in `just e2e`.
 
+## DateTime Behavior
+
+`DateTime` values are stored as native JavaScript `Date` objects and
+round-trip back to Dart as `DateTime` values.
+
 ## Justfile Commands
 
 Common workflows are available via `just`:

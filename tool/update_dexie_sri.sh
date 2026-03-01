@@ -21,9 +21,7 @@ cat >"$hash_file" <<EOF
 // GENERATED FILE. Do not edit by hand.
 // Updated by: tool/update_dexie_sri.sh
 
-const String dexieScriptSha384Base64 =
-    '$hash';
-const String dexieScriptIntegrity = 'sha384-\$dexieScriptSha384Base64';
+const String dexieScriptIntegrity = 'sha384-$hash';
 EOF
 
 echo "Updated Dexie SHA-384 in $hash_file: $hash"

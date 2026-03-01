@@ -1,13 +1,16 @@
 // ignore_for_file: implementation_imports
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:math';
 
 import 'package:dexie_web/src/dexie_sri.g.dart';
 import 'package:dexie_web/src/dexie_web_impl.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:patrol/patrol.dart';
 import 'package:web/web.dart' as web;
 
@@ -52,7 +55,7 @@ void _resetDexieGlobals() {
     (function() {
       try { delete globalThis.Dexie; } catch (_) {}
       try { delete globalThis.__dexie_web_source; } catch (_) {}
-      try { delete globalThis.__dexie_web_sha384; } catch (_) {}
+      try { delete globalThis.__dexie_web_integrity; } catch (_) {}
       const scripts = document.querySelectorAll('script[src*="dexie.min.js"]');
       for (const script of scripts) {
         script.remove();
@@ -68,6 +71,14 @@ const Map<String, String> _friendsSchema = {
 };
 
 void main() {
+  patrolTest('bundled Dexie asset hash matches generated SRI constant', (
+    $,
+  ) async {
+    final bytes = await _loadDexieAssetBytes();
+    final digestBase64 = base64.encode(sha384.convert(bytes).bytes);
+    expect(dexieScriptIntegrity, 'sha384-$digestBase64');
+  });
+
   patrolTest('open initializes a usable database instance', ($) async {
     _resetDexieGlobals();
     final dbName = _uniqueDbName('dexie_e2e');
@@ -102,9 +113,9 @@ void main() {
       expect(script!.integrity, dexieScriptIntegrity);
 
       final source = _globalThis.getProperty('__dexie_web_source'.toJS);
-      final hash = _globalThis.getProperty('__dexie_web_sha384'.toJS);
+      final integrity = _globalThis.getProperty('__dexie_web_integrity'.toJS);
       expect(source.dartify(), 'dexie_web');
-      expect(hash.dartify(), dexieScriptSha384Base64);
+      expect(integrity.dartify(), dexieScriptIntegrity);
     } finally {
       await _deleteDbByName(dbName);
     }
@@ -151,7 +162,8 @@ void main() {
       final persisted = await db2.getAll<Map<String, dynamic>>('friends');
       expect(persisted, hasLength(2));
       final bob = persisted.firstWhere((row) => row['name'] == 'Bob');
-      expect(bob['birthday'], startsWith('2000-01-01'));
+      expect(bob['birthday'], isA<DateTime>());
+      expect((bob['birthday'] as DateTime).toUtc(), DateTime.utc(2000, 1, 1));
       expect((bob['nested'] as Map<String, dynamic>)['state'], 'MA');
     } finally {
       await _deleteDbByName(dbName);
@@ -189,4 +201,9 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+}
+
+Future<Uint8List> _loadDexieAssetBytes() async {
+  final data = await rootBundle.load('packages/dexie_web/assets/dexie.min.js');
+  return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
 }

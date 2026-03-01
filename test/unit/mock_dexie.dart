@@ -12,7 +12,7 @@ void installMockDexie() {
       if (globalThis.__dexieMockInstalled) return;
       globalThis.__dexieMockInstalled = true;
       globalThis.__dexie_web_source = 'dexie_web';
-      globalThis.__dexie_web_sha384 = '$dexieScriptSha384Base64';
+      globalThis.__dexie_web_integrity = '$dexieScriptIntegrity';
       globalThis.__dexieMockDatabases = new Map();
 
       class MockCollection {
@@ -40,7 +40,11 @@ void installMockDexie() {
           }
         }
         put(item) {
-          const cloned = item == null ? item : JSON.parse(JSON.stringify(item));
+          const cloned = item == null
+            ? item
+            : (typeof structuredClone === 'function'
+                ? structuredClone(item)
+                : JSON.parse(JSON.stringify(item)));
           const rows = this.dbStore.tables.get(this.tableName);
           if (cloned && cloned.id == null) {
             const next = (this.dbStore.counters.get(this.tableName) || 0) + 1;
