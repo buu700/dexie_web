@@ -1,170 +1,97 @@
 # dexie_web
 
-Self-contained Dexie.js (IndexedDB) wrapper for Flutter Web.
+A self-contained, zero-configuration [Dexie.js](https://dexie.org) (IndexedDB) wrapper for Flutter Web. 
 
-- Zero manual `<script>` tags.
-- Bundled `dexie.min.js` committed in package assets.
-- Loaded only from package assets (no CDN fallback), with SRI enforced.
-- Dart-first API (`open`, `put`, `get`, `getAll`, `whereEquals`).
+`dexie_web` eliminates the friction of using IndexedDB in Flutter Web. It bundles the Dexie JS library directly into the package assets and automatically injects it at run-time with Subresource Integrity (SRI) enforced. No external CDN dependencies, no manual `<script>` tags in your `index.html`, and fully WASM-ready using modern `dart:js_interop`.
+
+For avoidance of doubt, `dexie_web` is web-only at run-time. It can be imported on non-web platforms for shared code, but calling its APIs off-web throws `UnsupportedError`.
+
+## Features
+
+* **Zero Config:** Automatically loads the bundled Dexie.js script when you open a database.
+* **Offline-First & Secure:** Does not rely on external networks. Loaded strictly from local package assets with built-in SRI hash validation to prevent tampering.
+* **Type-Safe & Dart-First:** Wrap IndexedDB operations in a familiar Dart API (`open`, `put`, `get`, `getAll`, `whereEquals`).
+* **Cross-Platform Stubs:** Safely import and compile on iOS/Android/Desktop (methods will throw an `UnsupportedError` if invoked off-web, but compilation won't break).
+* **Native Dates:** Dart `DateTime` objects are automatically serialized to native JavaScript `Date` objects for accurate IndexedDB sorting and querying.
 
 ## Installation
 
-Add to your app:
+Add the package to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  dexie_web: ^0.1.0
+  dexie_web: ^0.1.1
 ```
 
-Then run:
+Or install via the command line:
 
 ```bash
-flutter pub get
+flutter pub add dexie_web
 ```
 
 ## Usage
+
+Using `dexie_web` is straightforward. Instantiate a `DexieDatabase`, define your schema, and start reading/writing data.
 
 ```dart
 import 'package:dexie_web/dexie_web.dart';
 
 Future<void> main() async {
+  // 1. Initialize the database instance
   final db = DexieDatabase('myAppDb');
 
+  // 2. Open the database and define your schema.
+  // The Dexie script is automatically injected into the DOM here if it isn't already.
   await db.open({
-    'friends': '++id, name, age',
+    'friends': '++id, name, age, birthday',
     'todos': '++id, title, completed',
   });
 
-  await db.put('friends', {'name': 'Alice', 'age': 30});
+  // 3. Write data
+  await db.put('friends', {
+    'name': 'Alice', 
+    'age': 30,
+    'birthday': DateTime.utc(1996, 1, 1),
+  });
 
-  final friends = await db.getAll<Map>('friends');
-  final adults = await db.whereEquals<Map>('friends', 'age', 18);
+  // 4. Read data
+  final allFriends = await db.getAll<Map<String, dynamic>>('friends');
+  
+  // 5. Query data
+  final adults = await db.whereEquals<Map<String, dynamic>>('friends', 'age', 18);
+
+  print('friends: ${allFriends.length}, adults: ${adults.length}');
   db.close();
-
-  // Use values so static analysis won't mark them unused in examples.
-  print('friends: ${friends.length}, adults: ${adults.length}');
 }
 ```
 
-Optional preload on web:
+## Advanced: Preloading & Loader Policies
+
+By default, `dexie_web` automatically injects the bundled `dexie.min.js` file the first time you call `db.open()`. If you'd like to preload the script earlier in your app's lifecycle to speed up initial database access, you can call:
 
 ```dart
 await ensureDexieInitialized();
 ```
 
-Loader policy control:
+### Customizing the Load Policy
+
+If you need to control how the script is loaded (for example, if you prefer to manually provide your own Dexie script via a CDN in your `index.html`), you can change the global load policy before initialization:
 
 ```dart
-// Default:
+// Default: Strictly loads the packaged asset and throws if an unmanaged global Dexie exists.
 setDefaultDexieLoadPolicy(DexieLoadPolicy.strictPackage);
 
-// Option 1:
+// Option 1: Expects a global `Dexie` object to already exist (e.g., loaded by your index.html).
 setDefaultDexieLoadPolicy(DexieLoadPolicy.strictGlobal);
 
-// Option 2:
+// Option 2: Uses a global `Dexie` if available, otherwise falls back to injecting the package asset.
 setDefaultDexieLoadPolicy(DexieLoadPolicy.preferGlobalFallbackPackage);
 ```
 
-You can also override per call:
+You can also override the policy per initialization call:
 
 ```dart
 await ensureDexieInitialized(
   policy: DexieLoadPolicy.preferGlobalFallbackPackage,
 );
 ```
-
-## Dexie Bundling Workflow
-
-This package bundles Dexie with npm at development time and commits built assets.
-
-```bash
-just bootstrap-ci
-just bundle
-```
-
-This generates:
-
-- `assets/dexie.min.js`
-- `assets/dexie.d.ts`
-
-## Testing (Chromium)
-
-This package is tested in a real browser with Chromium. Flutter's web device
-id stays `chrome` for `flutter test`; set `CHROME_EXECUTABLE` to the Chromium
-binary.
-
-```bash
-just test-web
-just e2e
-```
-
-- `just test-web` runs package tests in Chromium.
-- `just e2e` runs E2E tests from `example/patrol_test` with Patrol
-  (`patrol test --device chrome --web-headless true`).
-- `just e2e` auto-installs Patrol CLI if missing.
-- `just e2e` sets `PATROL_ANALYTICS_ENABLED=false` and enforces
-  `LANG/LC_ALL=en_US.UTF-8` for reliable Playwright + Flutter web startup.
-- In CI, run `just e2e-prepare-ci` before `just e2e` to preinstall Playwright
-  browser/runtime dependencies on Linux runners.
-
-`flutter test --platform=chrome` does not serve package assets, so real loader
-validation (script path + SRI) is covered by Patrol E2E in `just e2e`.
-
-## DateTime Behavior
-
-`DateTime` values are stored as native JavaScript `Date` objects and
-round-trip back to Dart as `DateTime` values.
-
-## Justfile Commands
-
-Common workflows are available via `just`:
-
-```bash
-just bootstrap
-just bootstrap-ci
-just bundle
-just analyze
-just test-web
-just e2e
-just ci-local
-just dexie-update
-just publish-dry-run
-```
-
-## Git Hooks (lefthook)
-
-This repository uses `lefthook` with a `pre-commit` hook that auto-formats
-staged Dart files (`dart format`) and staged web config files
-(`*.json`, `*.js`, `*.html`) with `prettier`, then re-stages changes.
-
-`lefthook` is expected to be installed on your system PATH.
-
-Install hooks:
-
-```bash
-just bootstrap
-```
-
-## Updating Dexie
-
-```bash
-just dexie-update
-```
-
-Then review changes:
-
-```bash
-git diff
-```
-
-`just dexie-update` also refreshes the loader's SRI hash in
-`lib/src/dexie_sri.g.dart`.
-If needed, adjust interop based on `assets/dexie.d.ts` changes.
-
-## Release Checklist
-
-1. Run `just dexie-update`.
-2. Update `CHANGELOG.md`.
-3. Bump `version` in `pubspec.yaml`.
-4. Commit, tag, and push.
-5. Publish with `flutter pub publish`.
