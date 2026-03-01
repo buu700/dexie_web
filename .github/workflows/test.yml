@@ -48,4 +48,6 @@ jobs:
         run: just e2e-prepare-ci
 
       - name: E2E tests (headless Chromium)
+        env:
+          E2E_TIMEOUT_SECONDS: "900"
         run: just e2e
