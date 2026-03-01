@@ -30,6 +30,9 @@ format:
 analyze:
   flutter analyze
 
+parity-check:
+  dart run tool/check_dexie_parity.dart
+
 test-vm:
   flutter test
 
@@ -96,6 +99,7 @@ e2e:
     exit 1
   fi
   cd example
+  mkdir -p test-results
   E2E_TIMEOUT_SECONDS="${E2E_TIMEOUT_SECONDS:-600}"
   timeout "${E2E_TIMEOUT_SECONDS}" env \
     CHROME_EXECUTABLE="$CHROME_EXECUTABLE" \
@@ -105,15 +109,18 @@ e2e:
     patrol test \
     --target patrol_test/dexie_e2e_test.dart \
     --device chrome \
-    --web-headless true
+    --web-headless true \
+    2>&1 | tee test-results/e2e.log
 
 check:
   just format
+  just parity-check
   just analyze
   just test-web
 
 ci-local:
   just bootstrap-ci
+  just parity-check
   just analyze
   just test-web
   just e2e

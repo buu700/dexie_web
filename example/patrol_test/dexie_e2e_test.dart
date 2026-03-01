@@ -189,9 +189,11 @@ void main() {
       await db.open(_friendsSchema);
       await _expectFutureThrowsWithoutHanging(
         db.getAll<Map<String, dynamic>>('does_not_exist'),
+        expectedErrorType: StateError,
       );
       await _expectFutureThrowsWithoutHanging(
         db.whereEquals<Map<String, dynamic>>('friends', 'does_not_exist', 1),
+        expectedErrorType: StateError,
       );
     } finally {
       db.close();
@@ -219,6 +221,7 @@ Future<Uint8List> _loadDexieAssetBytes() async {
 Future<void> _expectFutureThrowsWithoutHanging(
   Future<Object?> future, {
   Duration timeout = const Duration(seconds: 10),
+  Type? expectedErrorType,
 }) async {
   try {
     await future.timeout(timeout);
@@ -228,7 +231,12 @@ Future<void> _expectFutureThrowsWithoutHanging(
       'Expected an exception, but the future timed out after '
       '${timeout.inSeconds}s.',
     );
-  } catch (_) {
-    // Expected path.
+  } catch (error) {
+    if (expectedErrorType == null) {
+      return;
+    }
+    if (error.runtimeType != expectedErrorType) {
+      fail('Expected $expectedErrorType, but got ${error.runtimeType}.');
+    }
   }
 }

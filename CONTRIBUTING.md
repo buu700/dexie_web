@@ -38,6 +38,7 @@ We use `just` to encapsulate all common tasks. Run `just` or `just --list` to se
 * `just analyze`: Runs Flutter static analysis.
 * `just test-web`: Runs standard unit tests in Chromium.
 * `just e2e`: Runs full end-to-end integration tests using Patrol.
+* `just parity-check`: Verifies Dexie API parity by comparing implemented `Table`/`WhereClause`/`Collection` methods against `assets/dexie.d.ts` and failing with an explicit missing-method list.
 * `just ci-local`: Runs the full CI pipeline locally.
 * `just dexie-update`: Fetches the latest Dexie.js version from npm and rebuilds assets.
 
