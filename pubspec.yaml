@@ -1,0 +1,25 @@
+name: dexie_web
+description: Self-contained Dexie.js (IndexedDB) wrapper for Flutter Web. Zero-config, full Dart API, no manual JS setup required.
+version: 0.1.0
+homepage: https://github.com/buu700/dexie_web
+repository: https://github.com/buu700/dexie_web
+topics: [database, indexeddb, offline, web, pwa]
+platforms:
+  web:
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  web: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  assets:
+    - assets/dexie.min.js

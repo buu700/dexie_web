@@ -1,0 +1,192 @@
+// ignore_for_file: implementation_imports
+
+import 'dart:async';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
+import 'dart:math';
+
+import 'package:dexie_web/src/dexie_sri.g.dart';
+import 'package:dexie_web/src/dexie_web_impl.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:patrol/patrol.dart';
+import 'package:web/web.dart' as web;
+
+@JS('globalThis')
+external JSObject get _globalThis;
+
+Future<void> _deleteDbByName(String dbName) async {
+  final indexedDb = web.window.indexedDB;
+  final completer = Completer<void>();
+  final request = indexedDb.deleteDatabase(dbName);
+
+  request.onsuccess = ((web.Event _) {
+    if (!completer.isCompleted) {
+      completer.complete();
+    }
+  }).toJS;
+  request.onerror = ((web.Event _) {
+    if (!completer.isCompleted) {
+      completer.completeError(
+        StateError('Failed to delete IndexedDB database "$dbName".'),
+      );
+    }
+  }).toJS;
+  request.onblocked = ((web.Event _) {
+    if (!completer.isCompleted) {
+      completer.completeError(
+        StateError('IndexedDB delete blocked for database "$dbName".'),
+      );
+    }
+  }).toJS;
+
+  await completer.future;
+}
+
+String _uniqueDbName(String prefix) {
+  return '${prefix}_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(1 << 20)}';
+}
+
+void _resetDexieGlobals() {
+  globalContext.callMethodVarArgs<JSAny?>('eval'.toJS, [
+    '''
+    (function() {
+      try { delete globalThis.Dexie; } catch (_) {}
+      try { delete globalThis.__dexie_web_source; } catch (_) {}
+      try { delete globalThis.__dexie_web_sha384; } catch (_) {}
+      const scripts = document.querySelectorAll('script[src*="dexie.min.js"]');
+      for (const script of scripts) {
+        script.remove();
+      }
+    })();
+  '''
+        .toJS,
+  ]);
+}
+
+const Map<String, String> _friendsSchema = {
+  'friends': '++id, name, age, birthday, city',
+};
+
+void main() {
+  patrolTest('open initializes a usable database instance', ($) async {
+    _resetDexieGlobals();
+    final dbName = _uniqueDbName('dexie_e2e');
+    try {
+      final db = DexieDatabase(dbName);
+      await db.open(_friendsSchema);
+      expect(db.name, dbName);
+    } finally {
+      await _deleteDbByName(dbName);
+    }
+  });
+
+  patrolTest('ensureDexieInitialized is idempotent', ($) async {
+    _resetDexieGlobals();
+    final dbName = _uniqueDbName('dexie_e2e_loader');
+    try {
+      final db = DexieDatabase(dbName);
+      await db.open(_friendsSchema);
+
+      await ensureDexieInitialized();
+      await ensureDexieInitialized();
+
+      final scriptCount = web.document
+          .querySelectorAll('script[src*="dexie.min.js"]')
+          .length;
+      expect(scriptCount, greaterThan(0));
+
+      final script =
+          web.document.querySelector('script[src*="dexie.min.js"]')
+              as web.HTMLScriptElement?;
+      expect(script, isNotNull);
+      expect(script!.integrity, dexieScriptIntegrity);
+
+      final source = _globalThis.getProperty('__dexie_web_source'.toJS);
+      final hash = _globalThis.getProperty('__dexie_web_sha384'.toJS);
+      expect(source.dartify(), 'dexie_web');
+      expect(hash.dartify(), dexieScriptSha384Base64);
+    } finally {
+      await _deleteDbByName(dbName);
+    }
+  });
+
+  patrolTest('CRUD, query, and persistence work across instances', ($) async {
+    _resetDexieGlobals();
+    final dbName = _uniqueDbName('dexie_e2e_data');
+    try {
+      final db1 = DexieDatabase(dbName);
+      await db1.open(_friendsSchema);
+      await db1.put('friends', {
+        'name': 'Bob',
+        'age': 25,
+        'birthday': DateTime.utc(2000, 1, 1),
+        'city': 'Boston',
+        'nested': {'state': 'MA'},
+        'tags': ['flutter', 'dexie'],
+        'nullable': null,
+      });
+      await db1.put('friends', {'name': 'Eve', 'age': 17, 'city': 'Denver'});
+
+      final all = await db1.getAll<Map<String, dynamic>>('friends');
+      expect(all, hasLength(2));
+      expect(all.map((r) => r['name']).toSet(), {'Bob', 'Eve'});
+
+      final adults = await db1.whereEquals<Map<String, dynamic>>(
+        'friends',
+        'age',
+        25,
+      );
+      expect(adults, hasLength(1));
+      expect(adults.first['name'], 'Bob');
+
+      final noMatches = await db1.whereEquals<Map<String, dynamic>>(
+        'friends',
+        'age',
+        99,
+      );
+      expect(noMatches, isEmpty);
+
+      final db2 = DexieDatabase(dbName);
+      await db2.open(_friendsSchema);
+      final persisted = await db2.getAll<Map<String, dynamic>>('friends');
+      expect(persisted, hasLength(2));
+      final bob = persisted.firstWhere((row) => row['name'] == 'Bob');
+      expect(bob['birthday'], startsWith('2000-01-01'));
+      expect((bob['nested'] as Map<String, dynamic>)['state'], 'MA');
+    } finally {
+      await _deleteDbByName(dbName);
+    }
+  });
+
+  patrolTest('invalid table/index operations propagate runtime errors', (
+    $,
+  ) async {
+    _resetDexieGlobals();
+    final dbName = _uniqueDbName('dexie_e2e_errors');
+    try {
+      final db = DexieDatabase(dbName);
+      await db.open(_friendsSchema);
+      await expectLater(
+        db.getAll<Map<String, dynamic>>('does_not_exist'),
+        throwsA(isA<Object>()),
+      );
+      await expectLater(
+        db.whereEquals<Map<String, dynamic>>('friends', 'does_not_exist', 1),
+        throwsA(isA<Object>()),
+      );
+    } finally {
+      await _deleteDbByName(dbName);
+    }
+  });
+
+  patrolTest('calling table operation before open throws StateError', (
+    $,
+  ) async {
+    _resetDexieGlobals();
+    final unopened = DexieDatabase(_uniqueDbName('dexie_unopened'));
+    await expectLater(
+      unopened.getAll<dynamic>('friends'),
+      throwsA(isA<StateError>()),
+    );
+  });
+}

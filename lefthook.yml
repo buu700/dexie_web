@@ -1,0 +1,11 @@
+pre-commit:
+  commands:
+    format-dart:
+      glob: "**/*.dart"
+      run: dart format {staged_files}
+      stage_fixed: true
+    format-web:
+      glob: "**/*.{json,js,html,yaml}"
+      exclude: "assets/dexie.min.js|assets/dexie.d.ts"
+      run: npx prettier --write {staged_files}
+      stage_fixed: true

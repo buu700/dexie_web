@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "name": "dexie_web-js-bundle",
+  "version": "0.1.0",
+  "devDependencies": {
+    "dexie": "4.3.0",
+    "prettier": "^3.6.2"
+  }
+}

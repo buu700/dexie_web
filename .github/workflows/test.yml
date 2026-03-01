@@ -1,0 +1,48 @@
+name: Test dexie_web
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      FLUTTER_CHANNEL: stable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up just
+        uses: taiki-e/install-action@just
+
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium || sudo apt-get install -y chromium-browser
+          CHROME_BIN="$(which chromium || which chromium-browser)"
+          echo "CHROME_EXECUTABLE=$CHROME_BIN" >> "$GITHUB_ENV"
+          echo "Using Chromium at $CHROME_BIN"
+
+      - name: Bootstrap
+        run: just bootstrap-ci
+
+      - name: Analyze
+        run: just analyze
+
+      - name: Unit tests (Chromium)
+        run: just test-web
+
+      - name: E2E tests (headless Chromium)
+        run: just e2e
