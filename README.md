@@ -65,6 +65,45 @@ Future<void> main() async {
 }
 ```
 
+## Fluent API (Dexie-style)
+
+Alongside helper methods, `dexie_web` exposes a fluent API for `Table`, `WhereClause`, and `Collection`.
+
+```dart
+final friends = db.table<Map<String, dynamic>, dynamic, Map<String, dynamic>>(
+  'friends',
+);
+
+await friends.bulkPut([
+  {'name': 'Alice', 'age': 30},
+  {'name': 'Bob', 'age': 25},
+]);
+
+final adults = await friends
+    .whereIndex('age')
+    .aboveOrEqual(18)
+    .reverse()
+    .toList();
+```
+
+### Parity Coverage (Dexie 4.3 Runtime Surfaces)
+
+`dexie_web` covers the primary runtime query/mutation APIs for:
+
+* `Table`: `get`, `where`, `filter`, `count`, `offset`, `limit`, `each`, `toArray`, `toCollection`, `orderBy`, `reverse`, `mapToClass`, `add`, `update`, `upsert`, `put`, `delete`, `clear`, `bulkGet`, `bulkAdd`, `bulkPut`, `bulkUpdate`, `bulkDelete`
+* `WhereClause`: `above`, `aboveOrEqual`, `anyOf`, `anyOfIgnoreCase`, `below`, `belowOrEqual`, `between`, `equals`, `equalsIgnoreCase`, `inAnyRange`, `startsWith`, `startsWithAnyOf`, `startsWithIgnoreCase`, `startsWithAnyOfIgnoreCase`, `noneOf`, `notEqual`
+* `Collection`: `and`, `clone`, `count`, `distinct`, `each`, `eachKey`, `eachPrimaryKey`, `eachUniqueKey`, `filter`, `first`, `firstKey`, `keys`, `primaryKeys`, `last`, `lastKey`, `limit`, `offset`, `or`, `raw`, `reverse`, `sortBy`, `toArray`, `uniqueKeys`, `until`, `delete`, `modify`
+
+Aliases:
+
+* `toList()` -> `toArray()`
+* `remove()` -> `delete()`
+* `removeAll()` -> `clear()`
+
+## Deterministic Validation Errors
+
+`dexie_web` validates table/index names from your declared schema. Invalid table/index operations throw `StateError` immediately, rather than relying on browser-specific IndexedDB error timing.
+
 ## Advanced: Preloading & Loader Policies
 
 By default, `dexie_web` automatically injects the bundled `dexie.min.js` file the first time you call `db.open()`. If you'd like to preload the script earlier in your app's lifecycle to speed up initial database access, you can call:
