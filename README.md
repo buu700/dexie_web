@@ -39,6 +39,7 @@ Future<void> main() async {
 
   final friends = await db.getAll<Map>('friends');
   final adults = await db.whereEquals<Map>('friends', 'age', 18);
+  db.close();
 
   // Use values so static analysis won't mark them unused in examples.
   print('friends: ${friends.length}, adults: ${adults.length}');

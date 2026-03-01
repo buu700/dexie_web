@@ -87,11 +87,12 @@ void main() {
   patrolTest('open initializes a usable database instance', ($) async {
     _resetDexieGlobals();
     final dbName = _uniqueDbName('dexie_e2e');
+    final db = DexieDatabase(dbName);
     try {
-      final db = DexieDatabase(dbName);
       await db.open(_friendsSchema);
       expect(db.name, dbName);
     } finally {
+      db.close();
       await _deleteDbByName(dbName);
     }
   });
@@ -99,8 +100,8 @@ void main() {
   patrolTest('ensureDexieInitialized is idempotent', ($) async {
     _resetDexieGlobals();
     final dbName = _uniqueDbName('dexie_e2e_loader');
+    final db = DexieDatabase(dbName);
     try {
-      final db = DexieDatabase(dbName);
       await db.open(_friendsSchema);
 
       await ensureDexieInitialized();
@@ -122,6 +123,7 @@ void main() {
       expect(source.dartify(), 'dexie_web');
       expect(integrity.dartify(), dexieScriptIntegrity);
     } finally {
+      db.close();
       await _deleteDbByName(dbName);
     }
   });
@@ -129,8 +131,9 @@ void main() {
   patrolTest('CRUD, query, and persistence work across instances', ($) async {
     _resetDexieGlobals();
     final dbName = _uniqueDbName('dexie_e2e_data');
+    final db1 = DexieDatabase(dbName);
+    final db2 = DexieDatabase(dbName);
     try {
-      final db1 = DexieDatabase(dbName);
       await db1.open(_friendsSchema);
       await db1.put('friends', {
         'name': 'Bob',
@@ -162,7 +165,6 @@ void main() {
       );
       expect(noMatches, isEmpty);
 
-      final db2 = DexieDatabase(dbName);
       await db2.open(_friendsSchema);
       final persisted = await db2.getAll<Map<String, dynamic>>('friends');
       expect(persisted, hasLength(2));
@@ -171,6 +173,8 @@ void main() {
       expect((bob['birthday'] as DateTime).toUtc(), DateTime.utc(2000, 1, 1));
       expect((bob['nested'] as Map<String, dynamic>)['state'], 'MA');
     } finally {
+      db2.close();
+      db1.close();
       await _deleteDbByName(dbName);
     }
   });
@@ -180,22 +184,17 @@ void main() {
   ) async {
     _resetDexieGlobals();
     final dbName = _uniqueDbName('dexie_e2e_errors');
+    final db = DexieDatabase(dbName);
     try {
-      final db = DexieDatabase(dbName);
       await db.open(_friendsSchema);
-      await expectLater(
-        db
-            .getAll<Map<String, dynamic>>('does_not_exist')
-            .timeout(const Duration(seconds: 10)),
-        throwsA(isA<Object>()),
+      await _expectFutureThrowsWithoutHanging(
+        db.getAll<Map<String, dynamic>>('does_not_exist'),
       );
-      await expectLater(
-        db
-            .whereEquals<Map<String, dynamic>>('friends', 'does_not_exist', 1)
-            .timeout(const Duration(seconds: 10)),
-        throwsA(isA<Object>()),
+      await _expectFutureThrowsWithoutHanging(
+        db.whereEquals<Map<String, dynamic>>('friends', 'does_not_exist', 1),
       );
     } finally {
+      db.close();
       await _deleteDbByName(dbName);
     }
   });
@@ -215,4 +214,21 @@ void main() {
 Future<Uint8List> _loadDexieAssetBytes() async {
   final data = await rootBundle.load('packages/dexie_web/assets/dexie.min.js');
   return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+}
+
+Future<void> _expectFutureThrowsWithoutHanging(
+  Future<Object?> future, {
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  try {
+    await future.timeout(timeout);
+    fail('Expected an exception, but the future completed successfully.');
+  } on TimeoutException {
+    fail(
+      'Expected an exception, but the future timed out after '
+      '${timeout.inSeconds}s.',
+    );
+  } catch (_) {
+    // Expected path.
+  }
 }

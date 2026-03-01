@@ -84,6 +84,7 @@ void installMockDexie() {
           };
         }
         open() { return Promise.resolve(this); }
+        close() {}
         table(name) { return new MockTable(this._dbStore, name); }
       };
     })();

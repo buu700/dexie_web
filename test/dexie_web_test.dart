@@ -5,6 +5,9 @@ class _FakeDexieDatabase extends DexieDatabase {
   _FakeDexieDatabase(super.name);
 
   @override
+  void close() {}
+
+  @override
   Future<T?> get<T>(String tableName, dynamic key) async => null;
 
   @override

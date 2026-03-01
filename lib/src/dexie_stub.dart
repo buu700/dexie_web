@@ -21,6 +21,7 @@ abstract class DexieDatabase {
   final String name;
 
   Future<void> open(Map<String, String> schema);
+  void close();
   Future<void> put<T>(String tableName, T item);
   Future<T?> get<T>(String tableName, dynamic key);
   Future<List<T>> getAll<T>(String tableName);

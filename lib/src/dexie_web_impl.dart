@@ -340,6 +340,7 @@ extension type Dexie._(JSObject _) implements JSObject {
   external factory Dexie(JSString name);
   external Version version(JSNumber n);
   external JSPromise<JSAny?> open();
+  external void close();
   external Table table(JSString name);
 }
 
@@ -366,6 +367,12 @@ class DexieDatabase extends stub.DexieDatabase {
   DexieDatabase(super.name);
 
   Dexie? _db;
+
+  @override
+  void close() {
+    _db?.close();
+    _db = null;
+  }
 
   Dexie get _requireDb {
     final db = _db;
