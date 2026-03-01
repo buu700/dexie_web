@@ -44,5 +44,8 @@ jobs:
       - name: Unit tests (Chromium)
         run: just test-web
 
+      - name: Prepare E2E browser deps
+        run: just e2e-prepare-ci
+
       - name: E2E tests (headless Chromium)
         run: just e2e

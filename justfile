@@ -57,6 +57,18 @@ test-web:
   fi
   CHROME_EXECUTABLE="$CHROME_EXECUTABLE" flutter test --platform=chrome
 
+e2e-prepare-ci:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ "${CI:-}" != "true" ]]; then
+    echo "Skipping Playwright CI dependency installation outside CI."
+    exit 0
+  fi
+  cd example
+  # Pre-install Linux runtime deps needed by Playwright/Chromium in CI.
+  # This avoids Patrol's on-demand dependency installation failures.
+  npx --yes playwright install --with-deps chromium
+
 e2e:
   #!/usr/bin/env bash
   set -euo pipefail

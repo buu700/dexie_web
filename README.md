@@ -103,6 +103,8 @@ just e2e
 - `just e2e` auto-installs Patrol CLI if missing.
 - `just e2e` sets `PATROL_ANALYTICS_ENABLED=false` and enforces
   `LANG/LC_ALL=en_US.UTF-8` for reliable Playwright + Flutter web startup.
+- In CI, run `just e2e-prepare-ci` before `just e2e` to preinstall Playwright
+  browser/runtime dependencies on Linux runners.
 
 `flutter test --platform=chrome` does not serve package assets, so real loader
 validation (script path + SRI) is covered by Patrol E2E in `just e2e`.
