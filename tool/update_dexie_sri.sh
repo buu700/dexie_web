@@ -17,11 +17,13 @@ if [[ -z "$hash" ]]; then
   exit 1
 fi
 
-cat >"$hash_file" <<EOF
+cat > "$hash_file" <<EOF
 // GENERATED FILE. Do not edit by hand.
 // Updated by: tool/update_dexie_sri.sh
 
 const String dexieScriptIntegrity = 'sha384-$hash';
 EOF
+
+dart format "$hash_file"
 
 echo "Updated Dexie SHA-384 in $hash_file: $hash"
