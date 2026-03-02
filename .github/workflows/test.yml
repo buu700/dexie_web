@@ -7,31 +7,53 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      FLUTTER_CHANNEL: stable
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Determinate Nix
-        uses: DeterminateSystems/nix-installer-action@main
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
 
-      - name: Enable Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Set up just
+        uses: taiki-e/install-action@just
+
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium || sudo apt-get install -y chromium-browser
+          CHROME_BIN="$(which chromium || which chromium-browser)"
+          echo "CHROME_EXECUTABLE=$CHROME_BIN" >> "$GITHUB_ENV"
+          echo "Using Chromium at $CHROME_BIN"
 
       - name: Bootstrap
-        run: nix develop --command just bootstrap-ci
+        run: just bootstrap-ci
 
       - name: Analyze
-        run: nix develop --command just analyze
+        run: just analyze
 
       - name: Parity check
-        run: nix develop --command just parity-check
+        run: just parity-check
 
       - name: Unit tests (Chromium)
-        run: nix develop --command just test-web
+        run: just test-web
+
+      - name: Prepare E2E browser deps
+        run: just e2e-prepare-ci
 
       - name: E2E tests (headless Chromium)
         env:
           E2E_TIMEOUT_SECONDS: "900"
-        run: nix develop --command just e2e
+        run: just e2e
 
       - name: Upload E2E artifacts on failure
         if: failure()
