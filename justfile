@@ -1,7 +1,25 @@
-set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+set shell := ["bash", "--noprofile", "--norc", "-c"]
 
 default:
   @just --list
+
+shell:
+  nix develop --no-warn-dirty -i --keep HOME --keep PATH
+
+# Run any raw command inside the clean Nix devShell
+#   just exec flutter doctor
+#   just exec ls -la
+#   just exec cargo build
+exec *args:
+    nix develop --no-warn-dirty -i --keep HOME --keep PATH -c bash --noprofile --norc -eu -o pipefail -c 'exec "$@"' _ {{args}}
+
+# Run a `just` recipe inside the clean Nix devShell
+#   just run bootstrap
+#   just run e2e
+#   just run test-web
+#   just run ci-local
+run *args:
+    just exec just {{args}}
 
 bootstrap:
   just bootstrap-ci
