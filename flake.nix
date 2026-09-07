@@ -23,6 +23,8 @@
             pkgs.dart
             pkgs.nodejs_24
             pkgs.just
+            pkgs.lefthook
+            pkgs.openssl
             pkgs.playwright
             pkgs.playwright-driver.browsers
             pkgs.git
@@ -59,7 +61,8 @@
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
 
           shellHook = ''
-            export PATH="$HOME/.pub-cache/bin:$PATH"
+            export PUB_CACHE="''${PUB_CACHE:-$PWD/.cache/pub}"
+            export PATH="$PUB_CACHE/bin:$PATH"
             if [[ "${if isLinux then "1" else "0"}" == "1" ]]; then
               export CHROME_EXECUTABLE="${linuxChromeExecutable}"
             else
@@ -74,17 +77,12 @@
             echo "Chromium: ${chromiumDisplayVersion}"
             echo "CHROME_EXECUTABLE: ${"$"}{CHROME_EXECUTABLE:-not-found}"
 
-            if ! command -v patrol >/dev/null 2>&1; then
-              echo "First-time activation of patrol_cli..."
-              dart pub global activate patrol_cli
-            fi
-
             echo ""
             echo "Available commands:"
             echo "  just bootstrap"
             echo "  just e2e"
             echo "  just test-web"
-            echo "  just ci-local"
+            echo "  just run ci-local"
           '';
         };
       });

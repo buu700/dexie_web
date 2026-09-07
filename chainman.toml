@@ -1,0 +1,54 @@
+schema = 1
+
+[project]
+name = "dexie-web"
+default_profile = "default"
+
+[profiles.default]
+flake = "flake.nix#default"
+
+[environment]
+pass = ["CHROME_EXECUTABLE", "CI", "E2E_TIMEOUT_SECONDS", "LANG", "LC_ALL"]
+
+[environment.values]
+PUB_CACHE = "{root}/.cache/pub"
+
+[cache]
+preserve_environment = ["PUB_CACHE"]
+
+[commands]
+setup = [["just", "bootstrap-ci"]]
+build = [["just", "bundle"]]
+test = [["just", "test-web"]]
+verify = [["just", "ci-local"]]
+format = [["just", "format"]]
+bootstrap = [["just", "bootstrap"]]
+bootstrap-ci = [["just", "bootstrap-ci"]]
+bundle = [["just", "bundle"]]
+dexie-update = [["just", "dexie-update"]]
+analyze = [["just", "analyze"]]
+parity-check = [["just", "parity-check"]]
+test-vm = [["just", "test-vm"]]
+test-web = [["just", "test-web"]]
+e2e-prepare-ci = [["just", "e2e-prepare-ci"]]
+e2e = [["just", "e2e"]]
+check = [["just", "check"]]
+ci-local = [["just", "ci-local"]]
+publish-dry-run = [["just", "publish-dry-run"]]
+publish = [["just", "publish"]]
+hooks-install = [["just", "hooks-install"]]
+clean = [["just", "clean"]]
+
+[updates]
+profile = "default"
+eligibility = "resolver"
+minimum_age_days = 30
+resolver = [["node", "tool/resolve_dexie_update.mjs"]]
+verify = [["just", "ci-local"]]
+outputs = [
+    "assets/dexie.d.ts",
+    "assets/dexie.min.js",
+    "lib/src/dexie_sri.g.dart",
+    "package-lock.json",
+    "package.json",
+]

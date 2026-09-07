@@ -4,23 +4,13 @@ First, thank you for contributing! This document outlines the architecture, deve
 
 ## Prerequisites
 
-**Recommended (cross-platform, reproducible):**
-* [Determinate Nix](https://determinate.systems) with flakes enabled
-* [just](https://github.com/casey/just) (used as the command entrypoint)
-
-**Alternative (manual):**
-* Flutter & Dart SDK
-* Node.js 24+
-* [just](https://github.com/casey/just)
-* Chromium / Google Chrome
-* [lefthook](https://github.com/evilmartians/lefthook) (optional)
+* Git
+* [just](https://github.com/casey/just) as the command entrypoint
+* [Determinate Nix](https://determinate.systems) with flakes enabled, or Docker/Podman for `CHAINMAN_MODE=container-nix`
 
 ### Development with Nix (recommended)
 
 ```bash
-# Install Determinate Nix (one-time)
-curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
-
 # Run a project recipe in the reproducible dev shell
 just run bootstrap
 ```
@@ -48,7 +38,11 @@ just                # list recipes
 just run ci-local
 ```
 
-The Nix shell automatically installs `patrol_cli`, sets `CHROME_EXECUTABLE`, and provides Linux/WSL2 system libraries needed for Patrol E2E tests.
+The checked-in launcher downloads the pinned Chainman runtime into ignored `.chainman/`. Host Nix is the default;
+set `CHAINMAN_MODE=container-nix` to use Docker or Podman. The bootstrap recipe installs the compatible
+[`patrol_cli` 4.1.0](https://patrol.leancode.co/documentation/compatibility-table) into the project-local
+`.cache/pub`, while the Nix shell sets `CHROME_EXECUTABLE` and provides the
+Linux/WSL2 libraries needed for Patrol E2E tests. No global language toolchain is used.
 
 ## Getting Started
 
@@ -58,7 +52,7 @@ Once you've cloned the repository, run the bootstrap command. This will fetch Da
 just run bootstrap
 ```
 
-If you are not using Nix and installed toolchains manually, run recipes directly (`just bootstrap`, `just test-web`, etc.).
+Run project commands through `just run` so Chainman supplies the pinned toolchain.
 
 ## Project Architecture
 
@@ -71,7 +65,8 @@ Unlike typical Flutter web plugins that require users to modify their `index.htm
 
 ## Available Commands
 
-We use `just` to encapsulate all common tasks. Use `just run <recipe>` to run recipes in the clean Nix shell. If you are on the manual toolchain path, use `just <recipe>`. Run `just` (or `just run --list`) to see all available recipes:
+We use `just` to encapsulate all common tasks. Use `just run <recipe>` to run recipes in the clean Nix shell. Run
+`just --list` to see all available recipes:
 
 * `just run bootstrap`: Full local setup (deps, bundling, hooks).
 * `just run bundle`: Copies JS assets from `node_modules` and updates the SRI hash.
@@ -81,7 +76,7 @@ We use `just` to encapsulate all common tasks. Use `just run <recipe>` to run re
 * `just run e2e`: Runs full end-to-end integration tests using Patrol.
 * `just run parity-check`: Verifies Dexie API parity by comparing implemented `Table`/`WhereClause`/`Collection` methods against `assets/dexie.d.ts` and failing with an explicit missing-method list.
 * `just run ci-local`: Runs the full CI pipeline locally.
-* `just run dexie-update`: Fetches the latest Dexie.js version from npm and rebuilds assets.
+* `just run dexie-update`: Selects the newest eligible stable Dexie.js version and rebuilds assets.
 
 ## Testing
 
@@ -102,18 +97,19 @@ We use [Patrol](https://patrol.leancode.co/) for E2E testing to ensure the app a
 ```bash
 just run e2e
 ```
-*(If running in a non-Nix Linux CI environment, run `just run e2e-prepare-ci` first to install Playwright system dependencies.)*
+The pinned Nix profile supplies Chromium and Playwright dependencies; `e2e-prepare-ci` remains as a compatibility
+recipe and performs no host installation.
 
 ## Updating Upstream Dexie.js
 
-When a new version of `dexie` is released on npm, you can update the bundled version in this package by running:
+When a stable `dexie` release has satisfied the configured 30-day maturity period, update the bundled version by running:
 
 ```bash
 just run dexie-update
 ```
 
 This command will:
-1. Run `npm install dexie@latest --save-dev --ignore-scripts`
+1. Select the newest stable release old enough for the project policy and update the exact npm pin.
 2. Copy the new `dexie.min.js` and `dexie.d.ts` to the `assets/` folder.
 3. Automatically recalculate the SHA-384 hash and update `lib/src/dexie_sri.g.dart`.
 
@@ -134,7 +130,7 @@ just run format
 
 When preparing to publish a new version to pub.dev:
 
-1. Run `just run dexie-update` to ensure we are wrapping the latest JS library.
+1. Run `just dexie-update` to select the newest stable Dexie release that satisfies the 30-day maturity policy.
 2. Run `just run ci-local` to verify all tests and analyzers pass.
 3. Document the changes in `CHANGELOG.md`.
 4. Bump the `version` in `pubspec.yaml`.

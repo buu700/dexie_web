@@ -2,6 +2,20 @@
 
 A self-contained, zero-configuration [Dexie.js](https://dexie.org) (IndexedDB) wrapper for Flutter Web. 
 
+## Development
+
+Development requires Git, Just, and Nix. Docker or Podman is an optional
+container alternative. The checked-in launcher downloads the version- and
+hash-pinned Chainman runtime into ignored `.chainman/`; Flutter, Dart, Node,
+Chromium, and the remaining tools come from the project flake. Host Nix is the
+default for this repository. Use `CHAINMAN_MODE=container-nix` to select a
+container explicitly.
+
+Run `just run bootstrap` once, then use `just run test-web`, `just run e2e`, or
+`just run ci-local`. Dependency updates use `just dexie-update` for an
+uncommitted project update or `just deps-update` for the full Chainman
+transaction.
+
 `dexie_web` eliminates the friction of using IndexedDB in Flutter Web. It bundles the Dexie JS library directly into the package assets and automatically injects it at run-time with Subresource Integrity (SRI) enforced. No external CDN dependencies, no manual `<script>` tags in your `index.html`, and fully WASM-ready using modern `dart:js_interop`.
 
 For avoidance of doubt, `dexie_web` is web-only at run-time. It can be imported on non-web platforms for shared code, but calling its APIs off-web throws `UnsupportedError`.
@@ -134,3 +148,8 @@ await ensureDexieInitialized(
   policy: DexieLoadPolicy.preferGlobalFallbackPackage,
 );
 ```
+
+For a bundled runtime whose public release is not available yet, pass
+`--skip-chainman` to `just deps-update` to maintain project dependencies without
+querying the runtime release source. A requested unavailable runtime update fails
+explicitly. `--only-chainman` selects a runtime update after releases are available.

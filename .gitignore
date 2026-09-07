@@ -31,6 +31,8 @@ migrate_working_dir/
 /coverage/
 
 node_modules/
+/.chainman/
+/.cache/
 example/test-results/
 example/playwright-report/
 example/test_bundle.dart
