@@ -6,8 +6,14 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         isLinux = pkgs.stdenv.isLinux;
@@ -29,7 +35,8 @@
             pkgs.playwright-driver.browsers
             pkgs.git
             pkgs.coreutils
-          ] ++ pkgs.lib.optionals isLinux [
+          ]
+          ++ pkgs.lib.optionals isLinux [
             pkgs.chromium
             pkgs.libGL
             pkgs.libnotify
@@ -60,6 +67,37 @@
           PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
 
+          # Patrol's pinned runner downloads its own matching browser revisions.
+          # Their shared libraries still come from this shell, without host installs.
+          LD_LIBRARY_PATH = pkgs.lib.optionalString isLinux (
+            pkgs.lib.makeLibraryPath [
+              pkgs.alsa-lib
+              pkgs.atk
+              pkgs.at-spi2-atk
+              pkgs.at-spi2-core
+              pkgs.cairo
+              pkgs.cups
+              pkgs.dbus
+              pkgs.expat
+              pkgs.glib
+              pkgs.gtk3
+              pkgs.libdrm
+              pkgs.libxkbcommon
+              pkgs.mesa
+              pkgs.nspr
+              pkgs.nss
+              pkgs.pango
+              pkgs.xorg.libX11
+              pkgs.xorg.libXcomposite
+              pkgs.xorg.libXdamage
+              pkgs.xorg.libXext
+              pkgs.xorg.libXfixes
+              pkgs.xorg.libXrandr
+              pkgs.xorg.libxcb
+            ]
+          );
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "1";
+
           shellHook = ''
             export PUB_CACHE="''${PUB_CACHE:-$PWD/.cache/pub}"
             export PATH="$PUB_CACHE/bin:$PATH"
@@ -85,5 +123,6 @@
             echo "  just run ci-local"
           '';
         };
-      });
+      }
+    );
 }
