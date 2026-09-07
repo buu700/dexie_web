@@ -13,8 +13,11 @@ container explicitly.
 
 Run `just run bootstrap` once, then use `just run test-web`, `just run e2e`, or
 `just run ci-local`. Dependency updates use `just dexie-update` for an
-uncommitted project update or `just deps-update` for the full Chainman
-transaction.
+uncommitted npm dependency update or `just deps-update` for the full Chainman
+transaction. Shared adapters update Nix inputs, npm dependencies, Dart packages,
+and pinned GitHub Actions. New releases require 30 days of age and immutable
+registry evidence. The project retains its npm package manager and regenerates
+the bundled Dexie assets and SRI source before the complete verification suite.
 
 `dexie_web` eliminates the friction of using IndexedDB in Flutter Web. It bundles the Dexie JS library directly into the package assets and automatically injects it at run-time with Subresource Integrity (SRI) enforced. No external CDN dependencies, no manual `<script>` tags in your `index.html`, and fully WASM-ready using modern `dart:js_interop`.
 
