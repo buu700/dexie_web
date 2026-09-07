@@ -113,16 +113,39 @@ e2e:
   cd example
   mkdir -p test-results
   E2E_TIMEOUT_SECONDS="${E2E_TIMEOUT_SECONDS:-600}"
-  timeout "${E2E_TIMEOUT_SECONDS}" env \
-    CHROME_EXECUTABLE="$CHROME_EXECUTABLE" \
-    PATROL_ANALYTICS_ENABLED=false \
-    LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
-    patrol test \
-    --target patrol_test/dexie_e2e_test.dart \
-    --device chrome \
-    --web-headless true \
-    2>&1 | tee test-results/e2e.log
+  (
+    runner_pid=''
+    cleanup() {
+      status=$?
+      trap - EXIT INT TERM
+      if [[ -n "$runner_pid" ]]; then
+        # GNU timeout owns this process group. Patrol may leave its Flutter
+        # server alive after returning, so release the entire owned group.
+        kill -TERM -- "-$runner_pid" 2>/dev/null || true
+        for attempt in {1..20}; do
+          kill -0 -- "-$runner_pid" 2>/dev/null || break
+          sleep 0.1
+        done
+        kill -KILL -- "-$runner_pid" 2>/dev/null || true
+        wait "$runner_pid" 2>/dev/null || true
+      fi
+      exit "$status"
+    }
+    trap cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    timeout --kill-after=15s "${E2E_TIMEOUT_SECONDS}" env \
+      CHROME_EXECUTABLE="$CHROME_EXECUTABLE" \
+      PATROL_ANALYTICS_ENABLED=false \
+      LANG=en_US.UTF-8 \
+      LC_ALL=en_US.UTF-8 \
+      patrol test \
+      --target patrol_test/dexie_e2e_test.dart \
+      --device chrome \
+      --web-headless true &
+    runner_pid=$!
+    wait "$runner_pid"
+  ) 2>&1 | tee test-results/e2e.log
 
 check:
   just format
