@@ -82,12 +82,15 @@ test-web:
   CHROME_EXECUTABLE="$CHROME_EXECUTABLE" flutter test --platform=chrome
 
 e2e-prepare-ci:
-  @echo 'The pinned Nix profile supplies Chromium and Playwright; no host package installation is required.'
+  @echo 'Nix supplies browser libraries; the pinned Patrol runner installs its matching browsers in .cache/patrol-browsers.'
 
 e2e:
   #!/usr/bin/env bash
   set -euo pipefail
   command -v patrol >/dev/null 2>&1 || { echo 'Patrol CLI is missing; run just run bootstrap-ci.' >&2; exit 1; }
+  # Patrol explicitly installs its pinned Playwright browsers before running tests.
+  export PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/patrol-browsers"
+  mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
   CHROME_EXECUTABLE="${CHROME_EXECUTABLE:-}"
   if [[ -z "$CHROME_EXECUTABLE" ]]; then
     for candidate in \
