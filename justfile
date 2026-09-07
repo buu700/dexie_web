@@ -39,7 +39,7 @@ bundle:
   ./tool/update_dexie_sri.sh
 
 dexie-update:
-  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update --no-commit
+  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update --no-commit -- --targets js
 
 deps-update *args:
   CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update {{args}}
