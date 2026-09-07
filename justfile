@@ -4,22 +4,22 @@ default:
   @just --list
 
 shell:
-  nix develop --no-warn-dirty -i --keep HOME --keep PATH
+  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh shell --profile default
 
 # Run any raw command inside the clean Nix devShell
 #   just exec flutter doctor
 #   just exec ls -la
 #   just exec cargo build
 exec *args:
-    nix develop --no-warn-dirty -i --keep HOME --keep PATH -c bash --noprofile --norc -eu -o pipefail -c 'exec "$@"' _ {{args}}
+    CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh exec --profile default -- {{args}}
 
 # Run a `just` recipe inside the clean Nix devShell
 #   just run bootstrap
 #   just run e2e
 #   just run test-web
 #   just run ci-local
-run *args:
-    just exec just {{args}}
+run name *args:
+    CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run "{{name}}" -- {{args}}
 
 bootstrap:
   just bootstrap-ci
@@ -28,6 +28,7 @@ bootstrap:
 bootstrap-ci:
   flutter pub get
   (cd example && flutter pub get)
+  dart pub global activate patrol_cli 4.1.0
   npm ci --ignore-scripts
   just bundle
 
@@ -38,8 +39,10 @@ bundle:
   ./tool/update_dexie_sri.sh
 
 dexie-update:
-  npm install dexie@latest --save-dev --ignore-scripts
-  just bundle
+  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update --no-commit
+
+deps-update *args:
+  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update {{args}}
 
 format:
   dart format lib test example/lib example/test example/patrol_test tool
@@ -79,24 +82,12 @@ test-web:
   CHROME_EXECUTABLE="$CHROME_EXECUTABLE" flutter test --platform=chrome
 
 e2e-prepare-ci:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  if [[ "${CI:-}" != "true" ]]; then
-    echo "Skipping Playwright CI dependency installation outside CI."
-    exit 0
-  fi
-  cd example
-  # Pre-install Linux runtime deps needed by Playwright/Chromium in CI.
-  # This avoids Patrol's on-demand dependency installation failures.
-  npx --yes playwright install --with-deps chromium
+  @echo 'The pinned Nix profile supplies Chromium and Playwright; no host package installation is required.'
 
 e2e:
   #!/usr/bin/env bash
   set -euo pipefail
-  export PATH="$PATH:$HOME/.pub-cache/bin"
-  if ! command -v patrol >/dev/null 2>&1; then
-    dart pub global activate patrol_cli
-  fi
+  command -v patrol >/dev/null 2>&1 || { echo 'Patrol CLI is missing; run just run bootstrap-ci.' >&2; exit 1; }
   CHROME_EXECUTABLE="${CHROME_EXECUTABLE:-}"
   if [[ -z "$CHROME_EXECUTABLE" ]]; then
     for candidate in \
