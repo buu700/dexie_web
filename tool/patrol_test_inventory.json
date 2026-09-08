@@ -1,0 +1,11 @@
+{
+  "suite": "dexie_e2e_test",
+  "tests": [
+    "bundled Dexie asset hash matches generated SRI constant",
+    "open initializes a usable database instance",
+    "ensureDexieInitialized is idempotent",
+    "CRUD, query, and persistence work across instances",
+    "invalid table/index operations propagate runtime errors",
+    "calling table operation before open throws StateError"
+  ]
+}
