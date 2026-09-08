@@ -85,6 +85,75 @@ void main() {
     expect(check(report(), inventory), 2);
   });
 
+  test('accepts exact qualified starts from newer Patrol reporters', () {
+    final value = report();
+    for (final spec in specs(value)) {
+      spec['tests'][0]['results'][0]['stdout'][0]['text'] =
+          'PATROL_LOG ' +
+          jsonEncode({
+            'type': 'test',
+            'name': spec['title'],
+            'status': 'start',
+          }) +
+          '\n';
+    }
+    expect(check(value, inventory), 2);
+  });
+
+  test('rejects other declared names and near matches in Dart starts', () {
+    for (final name in [
+      'persistence',
+      'fixture persistence',
+      'other integrity',
+      'fixture integrity suffix',
+      'fixture fixture integrity',
+    ]) {
+      final value = report();
+      result(value)['stdout'][0]['text'] =
+          'PATROL_LOG ' +
+          jsonEncode({'type': 'test', 'name': name, 'status': 'start'}) +
+          '\n';
+      expect(() => check(value, inventory), throwsFormatException);
+    }
+  });
+
+  test('rejects duplicate starts across both supported name forms', () {
+    final value = report();
+    result(value)['stdout'].insert(1, {
+      'text':
+          'PATROL_LOG ' +
+          jsonEncode({
+            'type': 'test',
+            'name': 'fixture integrity',
+            'status': 'start',
+          }) +
+          '\n',
+    });
+    expect(() => check(value, inventory), throwsFormatException);
+  });
+
+  test('qualified start cannot hide a false-green Dart failure', () {
+    final value = report();
+    result(value)['stdout'][0]['text'] =
+        'PATROL_LOG ' +
+        jsonEncode({
+          'type': 'test',
+          'name': 'fixture integrity',
+          'status': 'start',
+        }) +
+        '\n';
+    result(value)['stdout'][1]['text'] =
+        'PATROL_LOG ' +
+        jsonEncode({
+          'type': 'test',
+          'name': 'fixture integrity',
+          'status': 'failure',
+          'error': 'SRI mismatch',
+        }) +
+        '\n';
+    expect(() => check(value, inventory), throwsFormatException);
+  });
+
   test('accepts text and binary chunks split within structured events', () {
     final value = report();
     final output = (result(value)['stdout'] as List)
