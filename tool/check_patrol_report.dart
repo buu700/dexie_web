@@ -126,7 +126,8 @@ int validatePatrolReport(
       );
       if (status == 'start') {
         _require(
-          event['name'] == expected[title],
+          // Patrol 4.1 logs the local description; 4.8 logs the full test name.
+          event['name'] == expected[title] || event['name'] == title,
           'Unexpected Dart start: $title',
         );
         starts++;
