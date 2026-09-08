@@ -56,6 +56,11 @@ parity-check:
 
 test-vm:
   flutter test
+  just test-tooling
+
+[private]
+test-tooling:
+  flutter test tool/patrol_report_test.dart
 
 test-web:
   #!/usr/bin/env bash
@@ -112,6 +117,9 @@ e2e:
   fi
   cd example
   mkdir -p test-results
+  # A previous successful report must never satisfy the current run.
+  rm -f -- playwright-report/results.json
+  report_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   E2E_TIMEOUT_SECONDS="${E2E_TIMEOUT_SECONDS:-600}"
   (
     runner_pid=''
@@ -142,22 +150,28 @@ e2e:
       patrol test \
       --target patrol_test/dexie_e2e_test.dart \
       --device chrome \
+      --profile \
+      --web-timeout 120000 \
+      --web-reporter '["html","json"]' \
       --web-headless true &
     runner_pid=$!
     wait "$runner_pid"
   ) 2>&1 | tee test-results/e2e.log
+  dart run ../tool/check_patrol_report.dart playwright-report/results.json ../tool/patrol_test_inventory.json "$report_started"
 
 check:
   just format
   just parity-check
   just analyze
   just test-web
+  just test-tooling
 
 ci-local:
   just bootstrap-ci
   just parity-check
   just analyze
   just test-web
+  just test-tooling
   just e2e
 
 publish-dry-run:
