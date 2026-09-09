@@ -10,16 +10,18 @@ shell:
 #   just exec flutter doctor
 #   just exec ls -la
 #   just exec cargo build
+[positional-arguments]
 exec *args:
-    CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh exec --profile default -- {{args}}
+    CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh exec --profile default -- "$@"
 
 # Run a `just` recipe inside the clean Nix devShell
 #   just run bootstrap
 #   just run e2e
 #   just run test-web
 #   just run ci-local
+[positional-arguments]
 run name *args:
-    CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run "{{name}}" -- {{args}}
+    name=$1; shift; CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run "$name" -- "$@"
 
 bootstrap:
   just bootstrap-ci
@@ -41,8 +43,9 @@ bundle:
 dexie-update:
   CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update --no-commit -- --targets js
 
+[positional-arguments]
 deps-update *args:
-  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update {{args}}
+  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update "$@"
 
 format:
   dart format lib test example/lib example/test example/patrol_test tool
@@ -60,6 +63,7 @@ test-vm:
 
 [private]
 test-tooling:
+  node --test tool/chainman_argv.test.mjs
   flutter test tool/patrol_report_test.dart
 
 test-web:
