@@ -15,7 +15,8 @@ First, thank you for contributing! This document outlines the architecture, deve
 just run bootstrap
 ```
 
-Use `just run <recipe>` for project recipes and `just exec <command...>` for arbitrary commands:
+Use `just run <recipe>` for any recipe in the justfile and `just exec <command...>` for arbitrary commands.
+Recipes do not need a duplicate entry in `chainman.toml`:
 
 ```bash
 just run test-web
@@ -38,7 +39,8 @@ just                # list recipes
 just run ci-local
 ```
 
-The checked-in launcher downloads the pinned Chainman runtime into ignored `.chainman/`. Host Nix is the default;
+Chainman manages development commands only; it is not a dependency of applications using `dexie_web`.
+The checked-in launcher installs the hash-verified pinned runtime into ignored `.chainman/`. Host Nix is the default;
 set `CHAINMAN_MODE=container-nix` to use Docker or Podman. The bootstrap recipe installs the compatible
 [`patrol_cli` 4.1.0](https://patrol.leancode.co/documentation/compatibility-table) into the project-local
 `.cache/pub`, while the Nix shell sets `CHROME_EXECUTABLE` and provides the

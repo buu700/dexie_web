@@ -20,8 +20,8 @@ exec *args:
 #   just run test-web
 #   just run ci-local
 [positional-arguments]
-run name *args:
-    name=$1; shift; CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run "$name" -- "$@"
+run +args:
+    CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh exec --profile default -- just "$@"
 
 bootstrap:
   just bootstrap-ci
