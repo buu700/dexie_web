@@ -19,6 +19,53 @@ single_line "$root"
 helper=$script_dir/chainman-fetch.nix
 [ -f "$helper" ] || helper=$script_dir/fetch.nix
 [ -f "$helper" ] && [ ! -L "$helper" ] || fail 'Missing regular chainman-fetch.nix companion.'
+CHAINMAN_REQUEST_ACTION=${1:-doctor}
+CHAINMAN_REQUEST_TASK=${2:-}
+export CHAINMAN_REQUEST_ACTION CHAINMAN_REQUEST_TASK
+control_dispatch() {
+    # Only the internal export operation mounts this private output directory.
+    # It builds verified tooling and emits JSON; no consumer code executes there.
+    control_output=$(mktemp -d "${TMPDIR:-/tmp}/chainman-control.XXXXXXXX")
+    trap 'rm -rf -- "$control_output"' EXIT HUP INT TERM
+    # Serialized data, never installed in the planner process environment. The
+    # trusted planner selects only declared environment.pass names from it.
+    (
+        umask 077
+        env -0 > "$control_output/host-environment"
+    )
+    case "$(uname -s):$(uname -m)" in
+        Linux:aarch64 | Linux:arm64) control_target=linux-arm64 ;;
+        Linux:x86_64) control_target=linux-amd64 ;;
+        Darwin:arm64) control_target=darwin-arm64 ;;
+        Darwin:x86_64) control_target=darwin-amd64 ;;
+        *) fail 'Unsupported native service-controller platform.' ;;
+    esac
+    control_engine=
+    control_candidates=${CHAINMAN_CONTAINER_ENGINE:-${CHAINMAN_ENGINE:-}}
+    if [ -z "$control_candidates" ]; then control_candidates='docker podman'; fi
+    for candidate in $control_candidates; do
+        case "$candidate" in docker | podman) ;; *) fail 'Unsupported container engine.' ;; esac
+        if command -v "$candidate" > /dev/null 2>&1; then
+            control_engine=$(command -v "$candidate")
+            break
+        fi
+    done
+    printf '%s\n%s\n' --mount "type=bind,src=$control_output,dst=$control_output" > "$control_output/mounts"
+    CHAINMAN_FORWARD_ENV='' CHAINMAN_CONTAINER_OPTIONS_FILE=$control_output/mounts "$self" _control-export "$control_output" "$control_target" \
+        "${XDG_CACHE_HOME:-$HOME/.cache}/chainman/services" "$control_engine" "$self" "$@"
+    case "$1" in
+        services-status | services-stop)
+            IFS= read -r control_state < "$control_output/state"
+            "$control_output/chainman-control" "${1#services-}" "$control_state"
+            ;;
+        services-up) "$control_output/chainman-control" up "$control_output/plan.json" ;;
+        *) "$control_output/chainman-control" run "$control_output/plan.json" ;;
+    esac
+    control_result=$?
+    rm -rf -- "$control_output"
+    trap - EXIT HUP INT TERM
+    exit "$control_result"
+}
 expression='import (builtins.toPath (builtins.getEnv "CHAINMAN_BOOTSTRAP_HELPER")) {
     root = builtins.getEnv "CHAINMAN_PROJECT_ROOT";
     archive = builtins.getEnv "CHAINMAN_ARCHIVE";
@@ -51,13 +98,29 @@ if [ "$mode" = host-nix ] || [ "${CHAINMAN_BOOTSTRAP_CONTAINER:-0}" = 1 ]; then
     else
         command -v nix > /dev/null 2>&1 || fail 'Host mode requires Nix; no host-language fallback is used.'
     fi
+    case "$nix_bin" in /*) ;; *) nix_bin=$(command -v "$nix_bin") ;; esac
+    case "$nix_bin" in /*) ;; *) nix_bin=$(CDPATH='' cd -- "$(dirname -- "$nix_bin")" && pwd)/$(basename -- "$nix_bin") ;; esac
+    # Probe the evaluator, not a vendor-specific --version display string.
+    "$nix_bin" --extra-experimental-features 'nix-command flakes' eval --raw --expr '
+      if builtins.compareVersions builtins.nixVersion "2.24" >= 0
+      then "compatible" else throw "Chainman requires Nix >= 2.24"
+    ' > /dev/null || fail 'Nix compatibility check failed; update the selected host/image Nix. Chainman does not replace it.'
+    # Resolve the profile symlinks so forwarding Nix does not also forward every
+    # unrelated program installed in the user's global profile.
+    selected_nix=$nix_bin
+    while [ -L "$selected_nix" ]; do
+        target=$(readlink "$selected_nix")
+        case "$target" in /*) selected_nix=$target ;; *) selected_nix=$(dirname -- "$selected_nix")/$target ;; esac
+    done
+    CHAINMAN_RUNTIME_NIX_BIN=$(CDPATH='' cd -P -- "$(dirname -- "$selected_nix")" && pwd)
+    export CHAINMAN_RUNTIME_NIX_BIN
     nix_eval() {
         CHAINMAN_BOOTSTRAP_HELPER=$helper CHAINMAN_PROJECT_ROOT=$root CHAINMAN_BOOTSTRAP_ACTION=$1 \
             "$nix_bin" --extra-experimental-features 'nix-command flakes' eval --impure --raw --expr "$expression"
     }
     metadata=$(nix_eval metadata)
     {
-        IFS= read -r content_id
+        IFS= read -r _content_id
         IFS= read -r nar_hash
         IFS= read -r archive
     } << EOF
@@ -77,68 +140,28 @@ EOF
         export CHAINMAN_ARCHIVE
     fi
     store=$(nix_eval fetch)
+    actual=$("$nix_bin" --extra-experimental-features nix-command hash path "$store")
+    [ "$actual" = "$nar_hash" ] || fail 'Runtime store source failed NAR verification.'
     # Archives are source distributions: symlinks are excluded before evaluating
     # even the verified flake, so extraction cannot introduce an outside path.
     [ -z "$(find "$store" -type l -print -quit)" ] || fail 'Runtime archives must not contain symlinks.'
+    if [ "${CHAINMAN_BOOTSTRAP_CONTAINER:-0}" != 1 ] && [ "$(nix_eval route)" = 1 ]; then
+        control_dispatch "$@"
+    fi
     export CHAINMAN_MODE="$mode" CHAINMAN_ACTIVE_MODE="$mode"
     # Bootstrap entry replaces an external project shell. Its old profile token no
     # longer describes PATH, even when the project inputs themselves are unchanged.
     unset IN_NIX_SHELL CHAINMAN_ACTIVE_PROFILE CHAINMAN_ACTIVE_FINGERPRINT
     exec "$nix_bin" --extra-experimental-features 'nix-command flakes' develop "path:$store/nix#bootstrap" --no-write-lock-file \
         --command python3 -c '
-import fcntl, os, pathlib, shutil, stat, subprocess, sys, tempfile
-root, content_id, expected, store, *args = sys.argv[1:]
-nix = os.path.join(os.environ["CHAINMAN_RUNTIME_NIX_BIN"], "nix")
-cache = pathlib.Path(root) / ".chainman"
-try:
-    cache.mkdir(mode=0o700, exist_ok=True)
-    directory = os.open(cache, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    lock = os.open(".bootstrap.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=directory)
-    if not stat.S_ISREG(os.fstat(lock).st_mode):
-        raise ValueError("bootstrap lock is not a regular file")
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    def verify_directory():
-        a, b = os.stat(cache, follow_symlinks=False), os.fstat(directory)
-        if (a.st_dev, a.st_ino) != (b.st_dev, b.st_ino):
-            raise ValueError("runtime directory changed during bootstrap")
-    verify_directory()
-    # Relative filesystem operations stay attached to the open real directory,
-    # even if another process renames its former pathname during installation.
-    os.fchdir(directory)
-    runtime = pathlib.Path(content_id)
-    def verify(path):
-        if path.is_symlink() or not path.is_dir():
-            raise ValueError("runtime must be a real directory")
-        actual = subprocess.check_output([nix, "--extra-experimental-features", "nix-command", "hash", "path", str(path)], text=True).strip()
-        if actual != expected:
-            raise ValueError("installed runtime failed NAR verification")
-    if not os.path.lexists(runtime):
-        stage = pathlib.Path(tempfile.mkdtemp(prefix=".install-", dir="."))
-        try:
-            shutil.copytree(store, stage, dirs_exist_ok=True, symlinks=True)
-            verify(stage)
-            os.rename(stage, runtime)
-        finally:
-            if stage.exists():
-                for current, dirs, files in os.walk(stage):
-                    os.chmod(current, 0o700)
-                shutil.rmtree(stage)
-    verify(runtime)
-    verify_directory()
-    runtime = cache / content_id
-    os.close(lock)
-    os.close(directory)
-    os.chdir(root)
-    os.environ.update(CHAINMAN_RUNTIME=str(runtime), CHAINMAN_ROOT=root, CHAINMAN_PROJECT_ROOT=root,
-                      PYTHONDONTWRITEBYTECODE="1")
-    # The current interpreter/environment came from the same verified archive.
-    # Keep them while executing the rehashed project-local source generation;
-    # entering an identical second bootstrap shell adds no integrity check.
-    os.execv(sys.executable, [sys.executable,
-        str(runtime / "scripts/chainman.py"), "--root", root, *args])
-except (OSError, ValueError, subprocess.CalledProcessError) as error:
-    sys.exit("Chainman bootstrap: " + str(error))
-' "$root" "$content_id" "$nar_hash" "$store" "$@"
+import os, sys
+root, store, *args = sys.argv[1:]
+os.chdir(root)
+os.environ.update(CHAINMAN_RUNTIME=store, CHAINMAN_ROOT=root, CHAINMAN_PROJECT_ROOT=root,
+                  PYTHONDONTWRITEBYTECODE="1")
+os.execv(sys.executable, [sys.executable,
+    store + "/scripts/chainman.py", "--root", root, *args])
+' "$root" "$store" "$@"
 fi
 
 engine=${CHAINMAN_CONTAINER_ENGINE:-${CHAINMAN_ENGINE:-}}
@@ -219,10 +242,21 @@ run --rm --user "$container_uid:$container_gid" --security-opt no-new-privileges
     --env 'NIX_CONFIG=build-users-group =' \
     --env "CHAINMAN_BOOTSTRAP_HELPER=/chainman-bootstrap/$(basename -- "$helper")" \
     --env "CHAINMAN_PROJECT_ROOT=$root" --env CHAINMAN_BOOTSTRAP_ACTION=options \
+    --env CHAINMAN_REQUEST_ACTION --env CHAINMAN_REQUEST_TASK \
     "$image" sh -eu -c "$container_init" \
     sh nix --extra-experimental-features 'nix-command flakes' eval --impure --raw --expr "$expression" > "$temporary/options"
+if grep -q -- '^--controller$' "$temporary/options"; then
+    rm -rf -- "$temporary"
+    trap - EXIT HUP INT TERM
+    control_dispatch "$@"
+fi
 
 # A selected name is passed to the engine without its value in the argument list.
+if [ -n "${CHAINMAN_CONTAINER_NETWORK:-}" ]; then
+    case "$CHAINMAN_CONTAINER_NETWORK" in *[!a-f0-9]*) fail 'Invalid owned network container identity.' ;; esac
+    [ "${#CHAINMAN_CONTAINER_NETWORK}" = 64 ] || fail 'Invalid owned network container identity.'
+    printf '%s\n' --network "container:$CHAINMAN_CONTAINER_NETWORK" >> "$temporary/options"
+fi
 env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' > "$temporary/names"
 printf '%s' "${CHAINMAN_FORWARD_ENV:-}" | tr ',' '\n' > "$temporary/patterns"
 printf '\n' >> "$temporary/patterns"
@@ -263,7 +297,13 @@ while IFS= read -r option; do
             case "$remainder" in "$target" | "$target:ro" | "$target:rw") ;; *) fail 'Unsupported volume option.' ;; esac
             ;;
         --network)
-            case "$value" in host | bridge) ;; *) fail 'Container network must be host or bridge.' ;; esac
+            case "$value" in
+                host | bridge) ;;
+                container:*)
+                    [ -n "${CHAINMAN_CONTAINER_NETWORK:-}" ] && [ "$value" = "container:$CHAINMAN_CONTAINER_NETWORK" ] || fail 'Container network is not an owned service namespace.'
+                    ;;
+                *) fail 'Container network must be host, bridge or a verified service namespace.' ;;
+            esac
             set -- "$option" "$value" "$@"
             continue
             ;;
@@ -370,8 +410,16 @@ if [ -n "${CHAINMAN_ARCHIVE:-}" ]; then
     set -- --env "CHAINMAN_ARCHIVE=$archive" "$@"
 fi
 case "$self" in "$root"/*) ;; *) set -- --mount "type=bind,src=$script_dir,dst=$script_dir,readonly" "$@" ;; esac
+if [ -n "${CHAINMAN_CONTAINER_NAME:-}" ]; then
+    case "$CHAINMAN_CONTAINER_NAME" in chainman-[A-Za-z0-9_-]*) ;; *) fail 'Invalid owned container name.' ;; esac
+    case "${CHAINMAN_CONTAINER_OWNER:-}" in '' | *[!a-f0-9]*) fail 'Invalid container ownership token.' ;; esac
+    [ "${#CHAINMAN_CONTAINER_OWNER}" = 32 ] || fail 'Invalid container ownership token.'
+    set -- --name "$CHAINMAN_CONTAINER_NAME" --label "dev.chainman.owner=$CHAINMAN_CONTAINER_OWNER" "$@"
+fi
+project_mount="type=bind,src=$root,dst=$root"
+if [ "$CHAINMAN_REQUEST_ACTION" = _control-export ]; then project_mount=$project_mount,readonly; fi
 set -- --rm --init --interactive --user "$container_uid:$container_gid" --security-opt no-new-privileges --cap-drop ALL \
-    --mount "type=volume,src=$volume,dst=/nix" --mount "type=bind,src=$root,dst=$root" \
+    --mount "type=volume,src=$volume,dst=/nix" --mount "$project_mount" \
     --mount "type=volume,src=$downloads_volume,dst=/chainman-downloads" --env TOOLCHAIN_DOWNLOAD_CACHE=/chainman-downloads \
     --workdir "$root" \
     --env HOME=/tmp/chainman-home --env CHAINMAN_MODE=container-nix --env CHAINMAN_BOOTSTRAP_CONTAINER=1 \

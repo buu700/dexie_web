@@ -31,12 +31,10 @@ const commandName = 'named "command" $(touch unexpected-execution)';
 
 for (const [recipe, supplied, prefix] of [
   ["exec", opaqueArguments, ["exec", "--profile", "default", "--"]],
-  [
-    "run",
-    [commandName, ...opaqueArguments],
-    ["exec", "--profile", "default", "--", "just", commandName],
-  ],
+  ["run", [commandName, ...opaqueArguments], ["run", commandName]],
   ["deps-update", opaqueArguments, ["deps-update"]],
+  ["chainman-update", opaqueArguments, ["chainman-update"]],
+  ["e2e", opaqueArguments, ["run", "e2e", "--"]],
 ]) {
   for (const [mode, exit] of [
     [undefined, 0],

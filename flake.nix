@@ -18,7 +18,8 @@
         pkgs = nixpkgs.legacyPackages.${system};
         isLinux = pkgs.stdenv.isLinux;
         linuxChromeExecutable = if isLinux then "${pkgs.chromium}/bin/chromium" else "";
-        chromiumDisplayVersion = if isLinux then pkgs.chromium.version else "Playwright bundled Chromium";
+        chromiumDisplayVersion =
+          if isLinux then pkgs.chromium.version else "host Chrome (must match Nix ChromeDriver)";
       in
       {
         devShells.default = pkgs.mkShell {
@@ -26,85 +27,25 @@
 
           buildInputs = [
             pkgs.flutter
-            pkgs.dart
             pkgs.nodejs_24
             pkgs.just
             pkgs.lefthook
             pkgs.openssl
-            pkgs.playwright
-            pkgs.playwright-driver.browsers
+            pkgs.chromedriver
+            pkgs.curl
             pkgs.git
             pkgs.coreutils
           ]
-          ++ pkgs.lib.optionals isLinux [
-            pkgs.chromium
-            pkgs.libGL
-            pkgs.libnotify
-            pkgs.gtk3
-            pkgs.nss
-            pkgs.nspr
-            pkgs.atk
-            pkgs."at-spi2-atk"
-            pkgs.cups
-            pkgs.dbus
-            pkgs.libdrm
-            pkgs.xorg.libX11
-            pkgs.xorg.libXcomposite
-            pkgs.xorg.libXdamage
-            pkgs.xorg.libXext
-            pkgs.xorg.libXfixes
-            pkgs.xorg.libXrandr
-            pkgs.xorg.libxcb
-            pkgs.mesa
-            pkgs.xorg.libxkbfile
-            pkgs.xorg.libXcursor
-            pkgs.xorg.libXi
-            pkgs.xorg.libXScrnSaver
-            pkgs."alsa-lib"
-          ];
+          ++ pkgs.lib.optionals isLinux [ pkgs.chromium ];
 
+          # dart run must resolve Flutter SDK dependencies against this same SDK.
+          FLUTTER_ROOT = "${pkgs.flutter}";
           FLUTTER_WEB_BROWSER = "chromium";
-          PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-
-          # Patrol's pinned runner downloads its own matching browser revisions.
-          # Their shared libraries still come from this shell, without host installs.
-          LD_LIBRARY_PATH = pkgs.lib.optionalString isLinux (
-            pkgs.lib.makeLibraryPath [
-              pkgs.alsa-lib
-              pkgs.atk
-              pkgs.at-spi2-atk
-              pkgs.at-spi2-core
-              pkgs.cairo
-              pkgs.cups
-              pkgs.dbus
-              pkgs.expat
-              pkgs.glib
-              pkgs.gtk3
-              pkgs.libdrm
-              pkgs.libxkbcommon
-              pkgs.mesa
-              pkgs.nspr
-              pkgs.nss
-              pkgs.pango
-              pkgs.xorg.libX11
-              pkgs.xorg.libXcomposite
-              pkgs.xorg.libXdamage
-              pkgs.xorg.libXext
-              pkgs.xorg.libXfixes
-              pkgs.xorg.libXrandr
-              pkgs.xorg.libxcb
-            ]
-          );
-          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "1";
-
           shellHook = ''
-            export PUB_CACHE="''${PUB_CACHE:-$PWD/.cache/pub}"
-            export PATH="$PUB_CACHE/bin:$PATH"
             if [[ "${if isLinux then "1" else "0"}" == "1" ]]; then
-              export CHROME_EXECUTABLE="${linuxChromeExecutable}"
+              export CHROME_EXECUTABLE="''${CHROME_EXECUTABLE:-${linuxChromeExecutable}}"
             else
-              export CHROME_EXECUTABLE="$(find /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome || true)"
+              export CHROME_EXECUTABLE="''${CHROME_EXECUTABLE:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
             fi
 
             echo "dexie_web dev shell (Nix) loaded"

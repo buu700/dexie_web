@@ -4,9 +4,9 @@ First, thank you for contributing! This document outlines the architecture, deve
 
 ## Prerequisites
 
-* Git
-* [just](https://github.com/casey/just) as the command entrypoint
-* [Determinate Nix](https://determinate.systems) with flakes enabled, or Docker/Podman for `CHAINMAN_MODE=container-nix`
+- Git
+- [just](https://github.com/casey/just) as the command entrypoint
+- [Determinate Nix](https://determinate.systems) with flakes enabled, or Docker/Podman for `CHAINMAN_MODE=container-nix`
 
 ### Development with Nix (recommended)
 
@@ -15,8 +15,8 @@ First, thank you for contributing! This document outlines the architecture, deve
 just run bootstrap
 ```
 
-Use `just run <recipe>` for any recipe in the justfile and `just exec <command...>` for arbitrary commands.
-Recipes do not need a duplicate entry in `chainman.toml`:
+Use `just run <task>` for the named tasks declared in `chainman.toml`, and
+`just exec <command...>` for arbitrary commands. Just recipes are small aliases:
 
 ```bash
 just run test-web
@@ -40,11 +40,12 @@ just run ci-local
 ```
 
 Chainman manages development commands only; it is not a dependency of applications using `dexie_web`.
-The checked-in launcher installs the hash-verified pinned runtime into ignored `.chainman/`. Host Nix is the default;
-set `CHAINMAN_MODE=container-nix` to use Docker or Podman. The bootstrap recipe installs the compatible
-[`patrol_cli` 4.1.0](https://patrol.leancode.co/documentation/compatibility-table) into the project-local
-`.cache/pub`, while the Nix shell sets `CHROME_EXECUTABLE` and provides the
-Linux/WSL2 libraries needed for Patrol E2E tests. No global language toolchain is used.
+The checked-in launcher executes the hash-verified runtime in the Nix store.
+Host Nix is the default; select `CHAINMAN_MODE=container-nix` for Docker or Podman.
+Frozen npm and Pub setup uses shared download caches and project-local installed
+artifacts, protected by Chainman's setup leases. Nix supplies Flutter, its Dart
+SDK, Chromium on Linux, and the matching ChromeDriver. E2E does not activate a
+global CLI or install Node dependencies in the Pub cache.
 
 ## Getting Started
 
@@ -58,7 +59,7 @@ Run project commands through `just run` so Chainman supplies the pinned toolchai
 
 ## Project Architecture
 
-Unlike typical Flutter web plugins that require users to modify their `index.html`, this package is designed to be **zero-config and offline-first**. 
+Unlike typical Flutter web plugins that require users to modify their `index.html`, this package is designed to be **zero-config and offline-first**.
 
 1. **Asset Bundling**: We pull the `dexie` package via npm.
 2. **SRI Generation**: The `just run bundle` command copies `dexie.min.js` into our `assets/` directory and triggers `tool/update_dexie_sri.sh`.
@@ -70,36 +71,48 @@ Unlike typical Flutter web plugins that require users to modify their `index.htm
 We use `just` to encapsulate all common tasks. Use `just run <recipe>` to run recipes in the clean Nix shell. Run
 `just --list` to see all available recipes:
 
-* `just run bootstrap`: Full local setup (deps, bundling, hooks).
-* `just run bundle`: Copies JS assets from `node_modules` and updates the SRI hash.
-* `just run format`: Formats Dart, JSON, JS, HTML, and YAML files.
-* `just run analyze`: Runs Flutter static analysis.
-* `just run test-web`: Runs standard unit tests in Chromium.
-* `just run e2e`: Runs full end-to-end integration tests using Patrol.
-* `just run parity-check`: Verifies Dexie API parity by comparing implemented `Table`/`WhereClause`/`Collection` methods against `assets/dexie.d.ts` and failing with an explicit missing-method list.
-* `just run ci-local`: Runs the full CI pipeline locally.
-* `just run dexie-update`: Selects the newest eligible stable Dexie.js version and rebuilds assets.
+- `just run bootstrap`: Full local setup (deps, bundling, hooks).
+- `just run bundle`: Copies JS assets from `node_modules` and updates the SRI hash.
+- `just run format`: Formats Dart, JSON, JS, HTML, and YAML files.
+- `just run analyze`: Runs Flutter static analysis.
+- `just run test-web`: Runs standard unit tests in Chromium.
+- `just run e2e`: Runs profile-mode browser integration tests using Flutter’s SDK runner.
+- `just run parity-check`: Verifies Dexie API parity by comparing implemented `Table`/`WhereClause`/`Collection` methods against `assets/dexie.d.ts` and failing with an explicit missing-method list.
+- `just run ci-local`: Runs the full CI pipeline locally.
+- `just run dexie-update`: Selects the newest eligible stable Dexie.js version and rebuilds assets.
 
 ## Testing
 
 Because this package interacts heavily with the browser's DOM and IndexedDB APIs, testing is split into standard web tests and E2E tests.
 
-You must have a Chromium-based browser installed. If it is not in your default path, set the `CHROME_EXECUTABLE` environment variable.
+The Linux Nix profile supplies a matching Chromium/ChromeDriver pair. macOS host
+mode needs Chrome matching the pinned ChromeDriver; `CHROME_EXECUTABLE` selects
+an explicit browser. Container mode supplies the complete Linux pair.
 
 ### Unit Tests
+
 Run standard Flutter web tests:
+
 ```bash
 just run test-web
 ```
-*Note: `flutter test --platform=chrome` does not serve package assets properly, which is why we rely on E2E tests to validate the actual script loader.*
+
+_Note: `flutter test --platform=chrome` does not serve package assets properly, which is why we rely on E2E tests to validate the actual script loader._
 
 ### End-to-End (E2E) Tests
-We use [Patrol](https://patrol.leancode.co/) for E2E testing to ensure the app actually loads in a real browser environment, properly serves the bundled `dexie.min.js` asset, and passes the Subresource Integrity (SRI) checks.
+
+We use Flutter’s SDK `integration_test` with `flutter drive --profile` and
+ChromeDriver. This builds and serves the application with its package assets in a
+real browser, preserving all six IndexedDB, loader, and SRI cases from the prior
+Patrol suite. The driver requires Flutter success plus the exact checked-in test
+inventory, without skipped or duplicate cases. A nonce compiled into each run
+rejects stale reports; results are saved to `example/test-results/integration.json`.
 
 ```bash
 just run e2e
 ```
-The pinned Nix profile supplies Chromium and Playwright dependencies; `e2e-prepare-ci` remains as a compatibility
+
+Chainman owns ChromeDriver readiness, task deadlines, and child cleanup; `e2e-prepare-ci` remains as a compatibility
 recipe and performs no host installation.
 
 ## Updating Upstream Dexie.js
@@ -111,6 +124,7 @@ just run dexie-update
 ```
 
 This command will:
+
 1. Select the newest stable release old enough for the project policy and update the exact npm pin.
 2. Copy the new `dexie.min.js` and `dexie.d.ts` to the `assets/` folder.
 3. Automatically recalculate the SHA-384 hash and update `lib/src/dexie_sri.g.dart`.
@@ -119,14 +133,14 @@ This command will:
 
 ## Formatting and Git Hooks
 
-We enforce formatting for Dart (`dart format`) and web files (`prettier`). 
-If you ran `just run bootstrap`, Lefthook is already installed and will automatically format your staged files on `git commit`. 
+We enforce formatting for Dart (`dart format`) and web files (`prettier`).
+If you ran `just run bootstrap`, Lefthook is already installed and will automatically format your staged files on `git commit`.
 
 To manually format the codebase, run:
+
 ```bash
 just run format
 ```
-
 
 ## Release Checklist
 

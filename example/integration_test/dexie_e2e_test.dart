@@ -11,7 +11,7 @@ import 'package:dexie_web/src/dexie_web_impl.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
-import 'package:patrol/patrol.dart';
+import 'package:integration_test/integration_test.dart';
 import 'package:web/web.dart' as web;
 
 @JS('globalThis')
@@ -75,8 +75,30 @@ const Map<String, String> _friendsSchema = {
   'friends': '++id, name, age, birthday, city',
 };
 
+final _executed = <String>[];
+
+// Record actual invocations as well as framework results, so duplicate or
+// filtered tests cannot satisfy the checked-in inventory.
+void browserTest(String name, WidgetTesterCallback body) {
+  testWidgets(name, (tester) async {
+    _executed.add(name);
+    await body(tester);
+  });
+}
+
 void main() {
-  patrolTest('bundled Dexie asset hash matches generated SRI constant', (
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  tearDownAll(() {
+    binding.reportData = {
+      'runId': const String.fromEnvironment('E2E_RUN_ID'),
+      'executed': _executed,
+      'results': {
+        for (final entry in binding.results.entries)
+          entry.key: entry.value.toString(),
+      },
+    };
+  });
+  browserTest('bundled Dexie asset hash matches generated SRI constant', (
     $,
   ) async {
     final bytes = await _loadDexieAssetBytes();
@@ -84,7 +106,7 @@ void main() {
     expect(dexieScriptIntegrity, 'sha384-$digestBase64');
   });
 
-  patrolTest('open initializes a usable database instance', ($) async {
+  browserTest('open initializes a usable database instance', ($) async {
     _resetDexieGlobals();
     final dbName = _uniqueDbName('dexie_e2e');
     final db = DexieDatabase(dbName);
@@ -97,7 +119,7 @@ void main() {
     }
   });
 
-  patrolTest('ensureDexieInitialized is idempotent', ($) async {
+  browserTest('ensureDexieInitialized is idempotent', ($) async {
     _resetDexieGlobals();
     final dbName = _uniqueDbName('dexie_e2e_loader');
     final db = DexieDatabase(dbName);
@@ -128,7 +150,7 @@ void main() {
     }
   });
 
-  patrolTest('CRUD, query, and persistence work across instances', ($) async {
+  browserTest('CRUD, query, and persistence work across instances', ($) async {
     _resetDexieGlobals();
     final dbName = _uniqueDbName('dexie_e2e_data');
     final db1 = DexieDatabase(dbName);
@@ -179,7 +201,7 @@ void main() {
     }
   });
 
-  patrolTest('invalid table/index operations propagate runtime errors', (
+  browserTest('invalid table/index operations propagate runtime errors', (
     $,
   ) async {
     _resetDexieGlobals();
@@ -201,7 +223,7 @@ void main() {
     }
   });
 
-  patrolTest('calling table operation before open throws StateError', (
+  browserTest('calling table operation before open throws StateError', (
     $,
   ) async {
     _resetDexieGlobals();

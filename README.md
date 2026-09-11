@@ -1,23 +1,41 @@
 # dexie_web
 
-A self-contained, zero-configuration [Dexie.js](https://dexie.org) (IndexedDB) wrapper for Flutter Web. 
+A self-contained, zero-configuration [Dexie.js](https://dexie.org) (IndexedDB) wrapper for Flutter Web.
 
 ## Development
 
-Development requires Git, Just, and Nix. Docker or Podman is an optional
-container alternative. The checked-in launcher downloads the version- and
-hash-pinned Chainman runtime into ignored `.chainman/`; Flutter, Dart, Node,
-Chromium, and the remaining tools come from the project flake. Host Nix is the
-default for this repository. Use `CHAINMAN_MODE=container-nix` to select a
-container explicitly.
+Development requires Git, Just, and either host Nix or Docker/Podman. The checked-in
+launcher verifies the pinned Chainman runtime in the Nix store. Host mode uses the
+installed compatible Nix; container mode uses Chainman's digest-pinned, unmodified
+upstream Nix image. Flutter, Dart, Node, Chromium and the other tools come from the
+project flake. Host Nix is the default; select `CHAINMAN_MODE=container-nix` to use
+a container without host Nix or Python.
 
-Run `just run bootstrap` once, then use `just run test-web`, `just run e2e`, or
-`just run ci-local`. Dependency updates use `just dexie-update` for an
-uncommitted npm dependency update or `just deps-update` for the full Chainman
-transaction. Shared adapters update Nix inputs, npm dependencies, Dart packages,
-and pinned GitHub Actions. New releases require 30 days of age and immutable
-registry evidence. The project retains its npm package manager and regenerates
-the bundled Dexie assets and SRI source before the complete verification suite.
+Use `just setup`, `just build`, `just test`, and `just verify`, or the retained
+`just run bootstrap`, `just run test-web`, `just run e2e`, and `just run ci-local`
+aliases. `chainman.toml` declares frozen npm, root Dart and example Dart setup
+groups. Chainman verifies their inputs and readiness artifacts and holds setup
+leases while tasks run. Download caches are shared; `just cache-status` and
+`just cache-prune` expose the common cache policy.
+
+E2E uses Flutter's SDK `integration_test` runner in profile mode with a Nix-pinned
+Chromium/ChromeDriver pair. Chainman starts ChromeDriver, waits for readiness, and
+owns the service and task cleanup. The same six browser/IndexedDB/SRI assertions
+remain; an independent inventory and a per-run nonce require fresh completion of
+every case. No global CLI, npm install in Pub packages, or browser download is
+needed. The deadline is 600 seconds; `E2E_TIMEOUT_SECONDS` accepts 1–86400 seconds.
+
+On macOS, host Chrome must match the pinned ChromeDriver; the Linux container
+provides the complete pinned pair. `CHROME_EXECUTABLE` selects an explicit host
+browser. Run `just services-status` or `just services-stop` for interrupted E2E
+service recovery.
+
+`just dexie-update` performs an uncommitted npm update; `just deps-update` updates
+project dependencies transactionally and retains the runtime pin. Shared adapters
+update Nix inputs, npm dependencies, Dart packages and pinned GitHub Actions.
+New identities require 30 days of age and immutable registry evidence. The project
+retains npm and regenerates Dexie assets and SRI source before full verification.
+`just chainman-update` deliberately advances the runtime and its container pin.
 
 `dexie_web` eliminates the friction of using IndexedDB in Flutter Web. It bundles the Dexie JS library directly into the package assets and automatically injects it at run-time with Subresource Integrity (SRI) enforced. No external CDN dependencies, no manual `<script>` tags in your `index.html`, and fully WASM-ready using modern `dart:js_interop`.
 
@@ -25,11 +43,11 @@ For avoidance of doubt, `dexie_web` is web-only at run-time. It can be imported 
 
 ## Features
 
-* **Zero Config:** Automatically loads the bundled Dexie.js script when you open a database.
-* **Offline-First & Secure:** Does not rely on external networks. Loaded strictly from local package assets with built-in SRI hash validation to prevent tampering.
-* **Type-Safe & Dart-First:** Wrap IndexedDB operations in a familiar Dart API (`open`, `put`, `get`, `getAll`, `whereEquals`).
-* **Cross-Platform Stubs:** Safely import and compile on iOS/Android/Desktop (methods will throw an `UnsupportedError` if invoked off-web, but compilation won't break).
-* **Native Dates:** Dart `DateTime` objects are automatically serialized to native JavaScript `Date` objects for accurate IndexedDB sorting and querying.
+- **Zero Config:** Automatically loads the bundled Dexie.js script when you open a database.
+- **Offline-First & Secure:** Does not rely on external networks. Loaded strictly from local package assets with built-in SRI hash validation to prevent tampering.
+- **Type-Safe & Dart-First:** Wrap IndexedDB operations in a familiar Dart API (`open`, `put`, `get`, `getAll`, `whereEquals`).
+- **Cross-Platform Stubs:** Safely import and compile on iOS/Android/Desktop (methods will throw an `UnsupportedError` if invoked off-web, but compilation won't break).
+- **Native Dates:** Dart `DateTime` objects are automatically serialized to native JavaScript `Date` objects for accurate IndexedDB sorting and querying.
 
 ## Installation
 
@@ -66,14 +84,14 @@ Future<void> main() async {
 
   // 3. Write data
   await db.put('friends', {
-    'name': 'Alice', 
+    'name': 'Alice',
     'age': 30,
     'birthday': DateTime.utc(1996, 1, 1),
   });
 
   // 4. Read data
   final allFriends = await db.getAll<Map<String, dynamic>>('friends');
-  
+
   // 5. Query data
   final adults = await db.whereEquals<Map<String, dynamic>>('friends', 'age', 18);
 
@@ -107,15 +125,15 @@ final adults = await friends
 
 `dexie_web` covers the primary runtime query/mutation APIs for:
 
-* `Table`: `get`, `where`, `filter`, `count`, `offset`, `limit`, `each`, `toArray`, `toCollection`, `orderBy`, `reverse`, `mapToClass`, `add`, `update`, `upsert`, `put`, `delete`, `clear`, `bulkGet`, `bulkAdd`, `bulkPut`, `bulkUpdate`, `bulkDelete`
-* `WhereClause`: `above`, `aboveOrEqual`, `anyOf`, `anyOfIgnoreCase`, `below`, `belowOrEqual`, `between`, `equals`, `equalsIgnoreCase`, `inAnyRange`, `startsWith`, `startsWithAnyOf`, `startsWithIgnoreCase`, `startsWithAnyOfIgnoreCase`, `noneOf`, `notEqual`
-* `Collection`: `and`, `clone`, `count`, `distinct`, `each`, `eachKey`, `eachPrimaryKey`, `eachUniqueKey`, `filter`, `first`, `firstKey`, `keys`, `primaryKeys`, `last`, `lastKey`, `limit`, `offset`, `or`, `raw`, `reverse`, `sortBy`, `toArray`, `uniqueKeys`, `until`, `delete`, `modify`
+- `Table`: `get`, `where`, `filter`, `count`, `offset`, `limit`, `each`, `toArray`, `toCollection`, `orderBy`, `reverse`, `mapToClass`, `add`, `update`, `upsert`, `put`, `delete`, `clear`, `bulkGet`, `bulkAdd`, `bulkPut`, `bulkUpdate`, `bulkDelete`
+- `WhereClause`: `above`, `aboveOrEqual`, `anyOf`, `anyOfIgnoreCase`, `below`, `belowOrEqual`, `between`, `equals`, `equalsIgnoreCase`, `inAnyRange`, `startsWith`, `startsWithAnyOf`, `startsWithIgnoreCase`, `startsWithAnyOfIgnoreCase`, `noneOf`, `notEqual`
+- `Collection`: `and`, `clone`, `count`, `distinct`, `each`, `eachKey`, `eachPrimaryKey`, `eachUniqueKey`, `filter`, `first`, `firstKey`, `keys`, `primaryKeys`, `last`, `lastKey`, `limit`, `offset`, `or`, `raw`, `reverse`, `sortBy`, `toArray`, `uniqueKeys`, `until`, `delete`, `modify`
 
 Aliases:
 
-* `toList()` -> `toArray()`
-* `remove()` -> `delete()`
-* `removeAll()` -> `clear()`
+- `toList()` -> `toArray()`
+- `remove()` -> `delete()`
+- `removeAll()` -> `clear()`
 
 ## Deterministic Validation Errors
 
@@ -152,7 +170,6 @@ await ensureDexieInitialized(
 );
 ```
 
-For a bundled runtime whose public release is not available yet, pass
-`--skip-chainman` to `just deps-update` to maintain project dependencies without
-querying the runtime release source. A requested unavailable runtime update fails
-explicitly. `--only-chainman` selects a runtime update after releases are available.
+The bundled runtime supports development before its public release. An explicit
+`just chainman-update` requires an eligible public release; ordinary dependency
+updates do not query or replace the runtime pin.
