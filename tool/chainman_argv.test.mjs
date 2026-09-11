@@ -31,7 +31,11 @@ const commandName = 'named "command" $(touch unexpected-execution)';
 
 for (const [recipe, supplied, prefix] of [
   ["exec", opaqueArguments, ["exec", "--profile", "default", "--"]],
-  ["run", [commandName, ...opaqueArguments], ["run", commandName, "--"]],
+  [
+    "run",
+    [commandName, ...opaqueArguments],
+    ["exec", "--profile", "default", "--", "just", commandName],
+  ],
   ["deps-update", opaqueArguments, ["deps-update"]],
 ]) {
   for (const [mode, exit] of [
