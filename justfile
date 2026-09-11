@@ -1,193 +1,92 @@
-set shell := ["bash", "--noprofile", "--norc", "-c"]
+set positional-arguments
+set shell := ["bash", "--noprofile", "--norc", "-euo", "pipefail", "-c"]
 
 default:
-  @just --list
+    @just --list
 
 shell:
-  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh shell --profile default
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh shell --profile default
 
-# Run any raw command inside the clean Nix devShell
-#   just exec flutter doctor
-#   just exec ls -la
-#   just exec cargo build
-[positional-arguments]
-exec *args:
-    CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh exec --profile default -- "$@"
+exec +args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh exec --profile default -- "$@"
 
-# Run a `just` recipe inside the clean Nix devShell
-#   just run bootstrap
-#   just run e2e
-#   just run test-web
-#   just run ci-local
-[positional-arguments]
+# Compatibility entry: recipes are now declared tasks with setup and lifetime policy.
 run +args:
-    CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh exec --profile default -- just "$@"
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run "$@"
 
-bootstrap:
-  just bootstrap-ci
-  just hooks-install
+setup: bootstrap
+build: bundle
+test: test-web test-tooling
+verify: ci-local
 
-bootstrap-ci:
-  flutter pub get
-  (cd example && flutter pub get)
-  dart pub global activate patrol_cli 4.1.0
-  npm ci --ignore-scripts
-  just bundle
+cache-status:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh cache-status
 
-bundle:
-  npm ci --ignore-scripts
-  cp node_modules/dexie/dist/dexie.min.js assets/dexie.min.js
-  cp node_modules/dexie/dist/dexie.d.ts assets/dexie.d.ts
-  ./tool/update_dexie_sri.sh
+cache-prune *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh cache-prune "$@"
+
+deps-update *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update "$@"
+
+chainman-update *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh chainman-update "$@"
 
 dexie-update:
-  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update --no-commit -- --targets js
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update --no-commit -- --targets js
 
-[positional-arguments]
-deps-update *args:
-  CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh deps-update "$@"
+bootstrap *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run bootstrap -- "$@"
 
-format:
-  dart format lib test example/lib example/test example/patrol_test tool
-  npx prettier --write "**/*.{json,js,html,yaml}"
+bootstrap-ci *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run bootstrap-ci -- "$@"
 
-analyze:
-  flutter analyze
+bundle *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run bundle -- "$@"
 
-parity-check:
-  dart run tool/check_dexie_parity.dart
+format *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run format -- "$@"
 
-test-vm:
-  flutter test
-  just test-tooling
+analyze *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run analyze -- "$@"
 
-[private]
-test-tooling:
-  node --test tool/chainman_argv.test.mjs
-  flutter test tool/patrol_report_test.dart
+parity-check *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run parity-check -- "$@"
 
-test-web:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  CHROME_EXECUTABLE="${CHROME_EXECUTABLE:-}"
-  if [[ -z "$CHROME_EXECUTABLE" ]]; then
-    for candidate in \
-      "$(command -v chromium-browser 2>/dev/null || true)" \
-      "$(command -v chromium 2>/dev/null || true)" \
-      "$(command -v google-chrome 2>/dev/null || true)" \
-      /usr/bin/chromium-browser \
-      /snap/bin/chromium \
-    ; do
-      if [[ -n "$candidate" && -x "$candidate" ]]; then
-        CHROME_EXECUTABLE="$candidate"
-        break
-      fi
-    done
-  fi
-  if [[ -z "$CHROME_EXECUTABLE" ]]; then
-    echo "No Chromium/Chrome binary found. Set CHROME_EXECUTABLE." >&2
-    exit 1
-  fi
-  CHROME_EXECUTABLE="$CHROME_EXECUTABLE" flutter test --platform=chrome
+test-vm *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run test-vm -- "$@"
 
-e2e-prepare-ci:
-  @echo 'Nix supplies browser libraries; the pinned Patrol runner installs its matching browsers in .cache/patrol-browsers.'
+test-tooling *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run test-tooling -- "$@"
 
-e2e:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  command -v patrol >/dev/null 2>&1 || { echo 'Patrol CLI is missing; run just run bootstrap-ci.' >&2; exit 1; }
-  # Patrol explicitly installs its pinned Playwright browsers before running tests.
-  export PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/patrol-browsers"
-  mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
-  CHROME_EXECUTABLE="${CHROME_EXECUTABLE:-}"
-  if [[ -z "$CHROME_EXECUTABLE" ]]; then
-    for candidate in \
-      "$(command -v chromium-browser 2>/dev/null || true)" \
-      "$(command -v chromium 2>/dev/null || true)" \
-      "$(command -v google-chrome 2>/dev/null || true)" \
-      /usr/bin/chromium-browser \
-      /snap/bin/chromium \
-    ; do
-      if [[ -n "$candidate" && -x "$candidate" ]]; then
-        CHROME_EXECUTABLE="$candidate"
-        break
-      fi
-    done
-  fi
-  if [[ -z "$CHROME_EXECUTABLE" ]]; then
-    echo "No Chromium/Chrome binary found. Set CHROME_EXECUTABLE." >&2
-    exit 1
-  fi
-  cd example
-  mkdir -p test-results
-  # A previous successful report must never satisfy the current run.
-  rm -f -- playwright-report/results.json
-  report_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  E2E_TIMEOUT_SECONDS="${E2E_TIMEOUT_SECONDS:-600}"
-  (
-    runner_pid=''
-    cleanup() {
-      status=$?
-      trap - EXIT INT TERM
-      if [[ -n "$runner_pid" ]]; then
-        # GNU timeout owns this process group. Patrol may leave its Flutter
-        # server alive after returning, so release the entire owned group.
-        kill -TERM -- "-$runner_pid" 2>/dev/null || true
-        for attempt in {1..20}; do
-          kill -0 -- "-$runner_pid" 2>/dev/null || break
-          sleep 0.1
-        done
-        kill -KILL -- "-$runner_pid" 2>/dev/null || true
-        wait "$runner_pid" 2>/dev/null || true
-      fi
-      exit "$status"
-    }
-    trap cleanup EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-    timeout --kill-after=15s "${E2E_TIMEOUT_SECONDS}" env \
-      CHROME_EXECUTABLE="$CHROME_EXECUTABLE" \
-      PATROL_ANALYTICS_ENABLED=false \
-      LANG=en_US.UTF-8 \
-      LC_ALL=en_US.UTF-8 \
-      patrol test \
-      --target patrol_test/dexie_e2e_test.dart \
-      --device chrome \
-      --profile \
-      --web-timeout 120000 \
-      --web-reporter '["html","json"]' \
-      --web-headless true &
-    runner_pid=$!
-    wait "$runner_pid"
-  ) 2>&1 | tee test-results/e2e.log
-  dart run ../tool/check_patrol_report.dart playwright-report/results.json ../tool/patrol_test_inventory.json "$report_started"
+test-web *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run test-web -- "$@"
 
-check:
-  just format
-  just parity-check
-  just analyze
-  just test-web
-  just test-tooling
+e2e-prepare-ci *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run e2e-prepare-ci -- "$@"
 
-ci-local:
-  just bootstrap-ci
-  just parity-check
-  just analyze
-  just test-web
-  just test-tooling
-  just e2e
+e2e *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run e2e -- "$@"
 
-publish-dry-run:
-  flutter pub publish --dry-run
+check *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run check -- "$@"
 
-publish:
-  flutter pub publish
+ci-local *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run ci-local -- "$@"
 
-hooks-install:
-  lefthook install
+publish-dry-run *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run publish-dry-run -- "$@"
 
-clean:
-  flutter clean
-  (cd example && flutter clean)
-  rm -rf build
+publish *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run publish -- "$@"
+
+hooks-install *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run hooks-install -- "$@"
+
+clean *args:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh run clean -- "$@"
+
+services-status:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh services-status
+
+services-stop:
+    @CHAINMAN_MODE="${CHAINMAN_MODE:-host-nix}" ./scripts/chainman.sh services-stop
