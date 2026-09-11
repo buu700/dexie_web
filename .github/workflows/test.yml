@@ -29,5 +29,4 @@ jobs:
           name: e2e-artifacts
           path: |
             example/test-results
-            example/playwright-report
           if-no-files-found: warn

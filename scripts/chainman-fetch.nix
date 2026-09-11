@@ -82,16 +82,96 @@ let
         "--mount"
         "type=bind,src=${absolute},dst=${target}${if item.read_only or true then ",readonly" else ""}"
       ];
-  options =
-    b.concatMap pattern (config.environment.pass or [ ])
-    ++ b.concatMap mount (config.container.mounts or [ ])
+  request = b.getEnv "CHAINMAN_REQUEST_ACTION";
+  requestedName = b.getEnv "CHAINMAN_REQUEST_TASK";
+  transport =
+    if request == "_workflow-service" then
+      config.services.${requestedName}.transport or { }
+    else if request == "_workflow-task" || request == "run" then
+      config.tasks.${requestedName}.transport or { }
+    else
+      config.tasks.${request}.transport or { };
+  containerOptions =
+    item:
+    b.concatMap mount (item.mounts or [ ])
     ++ b.concatMap (port: [
       "--publish"
       (line port)
-    ]) (config.container.ports or [ ]);
+    ]) (item.ports or [ ])
+    ++ (
+      if item.host_access or false then
+        [
+          "--add-host"
+          "host.docker.internal:host-gateway"
+        ]
+      else
+        [ ]
+    );
+  options =
+    b.concatMap pattern (config.environment.pass or [ ])
+    ++ containerOptions (config.container or { })
+    ++ containerOptions transport;
+  requestedTask = if request == "run" then b.getEnv "CHAINMAN_REQUEST_TASK" else request;
+  hasServices =
+    visited: name:
+    if b.elem name visited then
+      fail "workflow dependency cycle"
+    else
+      let
+        task = config.tasks.${name} or { };
+      in
+      (task.services or [ ]) != [ ] || b.any (hasServices (visited ++ [ name ])) (task.depends_on or [ ]);
+  controller =
+    if
+      b.elem request [
+        "services-status"
+        "services-stop"
+        "services-run"
+        "services-up"
+      ]
+    then
+      true
+    else if
+      b.elem request [
+        "_control-export"
+        "_workflow-task"
+        "_workflow-service"
+        "_workflow-prepare"
+        "exec"
+        "shell"
+        "version"
+        "doctor"
+        "deps-query"
+        "deps-update"
+        "chainman-update"
+        "deps-check"
+        "clean"
+        "cache-prune"
+        "cache-status"
+      ]
+    then
+      false
+    else
+      config.schema or 1 == 2 && hasServices [ ] requestedTask;
+  controlOnly = b.elem request [
+    "_control-export"
+    "services-status"
+    "services-stop"
+  ];
 in
-if action == "options" then
-  (if options == [ ] then "" else lines options)
+if action == "route" then
+  (if controller then "1" else "0")
+else if action == "options" then
+  (
+    if controller then
+      lines [
+        "--controller"
+        "1"
+      ]
+    else
+      ""
+  )
+  + (if controlOnly || options == [ ] then "" else lines options)
 else if action == "metadata" then
   lines [
     (b.hashString "sha256" lock.narHash)
