@@ -19,10 +19,57 @@ single_line "$root"
 helper=$script_dir/chainman-fetch.nix
 [ -f "$helper" ] || helper=$script_dir/fetch.nix
 [ -f "$helper" ] && [ ! -L "$helper" ] || fail 'Missing regular chainman-fetch.nix companion.'
+if [ "${1:-}" = script ]; then
+    shift
+    script_profile=
+    if [ "${1:-}" = --profile ]; then
+        [ "$#" -ge 3 ] || fail 'script --profile requires a profile and a Bash script.'
+        script_profile=$2
+        [ -n "$script_profile" ] || fail 'script --profile requires a nonempty profile.'
+        shift 2
+    fi
+    [ "$#" -ge 1 ] || fail 'script requires a Bash script and optional arguments.'
+    script_file=$1
+    shift
+    [ -f "$script_file" ] && [ ! -L "$script_file" ] || fail 'script requires a regular Bash script.'
+    # Just creates shebang scripts outside the project mount. Carry their code
+    # as one literal argument, retaining trailing newlines, $0, argv and stdin.
+    script_body=$(cat -- "$script_file" && printf '.') || fail 'Could not read Bash script.'
+    script_body=${script_body%.}
+    set -- exec -- bash --noprofile --norc -eu -o pipefail -c "$script_body" "$script_file" "$@"
+    if [ -n "$script_profile" ]; then
+        shift
+        set -- exec --profile "$script_profile" "$@"
+    fi
+fi
 CHAINMAN_REQUEST_ACTION=${1:-doctor}
 CHAINMAN_REQUEST_TASK=${2:-}
 export CHAINMAN_REQUEST_ACTION CHAINMAN_REQUEST_TASK
 control_dispatch() {
+    if [ "$1" = services-reset ]; then
+        [ "$#" = 3 ] && [ "$3" = --discard-data ] || fail 'usage: services-reset TASK --discard-data'
+    fi
+    case "$1" in
+        services-status | services-stop) ;;
+        *)
+            if [ "$mode" = container-nix ] && [ "${CHAINMAN_CONTAINER_NETWORK_MODE:-bridge}" = host ]; then
+                fail 'Service workflows use owned network namespaces; the host-network override is for standalone tasks.'
+            fi
+            ;;
+    esac
+    case "$1" in
+        services-status | services-stop) ;;
+        *)
+            # Setup may produce application data identities used by volume
+            # compatibility. Run it before planning, in the ordinary project
+            # environment, without the private controller export mount.
+            case "$1" in
+                run | services-run | services-up | services-reset) control_task=${2:-} ;;
+                *) control_task=$1 ;;
+            esac
+            "$self" _service-prepare "$control_task" >&2
+            ;;
+    esac
     # Only the internal export operation mounts this private output directory.
     # It builds verified tooling and emits JSON; no consumer code executes there.
     control_output=$(mktemp -d "${TMPDIR:-/tmp}/chainman-control.XXXXXXXX")
@@ -59,6 +106,7 @@ control_dispatch() {
             "$control_output/chainman-control" "${1#services-}" "$control_state"
             ;;
         services-up) "$control_output/chainman-control" up "$control_output/plan.json" ;;
+        services-reset) "$control_output/chainman-control" reset "$control_output/plan.json" --discard-data ;;
         *) "$control_output/chainman-control" run "$control_output/plan.json" ;;
     esac
     control_result=$?
@@ -66,6 +114,51 @@ control_dispatch() {
     trap - EXIT HUP INT TERM
     exit "$control_result"
 }
+update_dispatch() {
+    # Fixed phases only. Host shell orchestration needs neither host Python nor
+    # an engine socket in the resolver or verifier containers.
+    umask 077
+    update_cache=${XDG_CACHE_HOME:-$HOME/.cache}/chainman/updates
+    mkdir -p "$update_cache"
+    update_output=$(mktemp -d "$update_cache/candidate.XXXXXXXX")
+    update_output=$(CDPATH='' cd -P -- "$update_output" && pwd)
+    trap 'printf "Chainman: update candidate preserved at %s\n" "$update_output/candidate" >&2' EXIT
+    mkdir "$update_output/candidate" "$update_output/control"
+    printf '%s\n%s\n' --mount "type=bind,src=$update_output,dst=$update_output" > "$update_output/control/mounts"
+    CHAINMAN_FORWARD_ENV='' CHAINMAN_CONTAINER_OPTIONS_FILE=$update_output/control/mounts \
+        "$self" _update-prepare "$update_output" "$@" >&2
+    if [ -f "$update_output/control/help" ]; then
+        rm -rf -- "$update_output"
+        trap - EXIT
+        exit 0
+    fi
+    IFS= read -r update_at < "$update_output/control/at"
+    update_launcher=$update_output/original-bootstrap/chainman.sh
+    update_candidate "$update_launcher" _update-resolve "$update_at" "$@" >&2
+    CHAINMAN_FORWARD_ENV='' CHAINMAN_CONTAINER_OPTIONS_FILE=$update_output/control/mounts \
+        CHAINMAN_PROJECT_ROOT=$root "$update_launcher" _update-inspect "$update_output" >&2
+    IFS= read -r update_changed < "$update_output/control/changed"
+    if [ "$update_changed" = yes ]; then
+        while IFS= read -r update_action && IFS= read -r update_task; do
+            CHAINMAN_UPDATE_ACTIVE=1 update_candidate \
+                "$update_output/candidate-bootstrap/chainman.sh" "$update_action" "$update_task" < /dev/null >&2
+        done < "$update_output/control/verify"
+    fi
+    CHAINMAN_FORWARD_ENV='' CHAINMAN_CONTAINER_OPTIONS_FILE=$update_output/control/mounts \
+        CHAINMAN_PROJECT_ROOT=$root "$update_launcher" _update-finalize "$update_output"
+    rm -rf -- "$update_output"
+    trap - EXIT
+    exit 0
+}
+update_candidate() (
+    # A disposable checkout must not inherit Git routing, hooks or identity that
+    # target the original. Values never become shell code.
+    for update_git in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
+        unset "$update_git"
+    done
+    exec env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=0 GIT_TERMINAL_PROMPT=0 \
+        CHAINMAN_PROJECT_ROOT="$update_output/candidate" "$@"
+)
 expression='import (builtins.toPath (builtins.getEnv "CHAINMAN_BOOTSTRAP_HELPER")) {
     root = builtins.getEnv "CHAINMAN_PROJECT_ROOT";
     archive = builtins.getEnv "CHAINMAN_ARCHIVE";
@@ -84,6 +177,16 @@ fi
 cd "$root"
 [ -f chainman.lock ] && [ ! -L chainman.lock ] || fail 'Missing regular chainman.lock.'
 [ ! -L "$root/.chainman" ] || fail '.chainman must be a real directory.'
+
+case "$CHAINMAN_REQUEST_ACTION" in
+    deps-update | chainman-update)
+        [ "${CHAINMAN_BOOTSTRAP_CONTAINER:-0}" != 1 ] || fail 'Start updates through the host launcher so candidate verification can control its own services.'
+        [ -z "${CHAINMAN_UPDATE_ACTIVE:-}" ] || fail 'An update hook must not recursively start another update.'
+        shift
+        if [ "$CHAINMAN_REQUEST_ACTION" = chainman-update ]; then set -- --only-chainman "$@"; fi
+        update_dispatch "$@"
+        ;;
+esac
 
 if [ "$mode" = host-nix ] || [ "${CHAINMAN_BOOTSTRAP_CONTAINER:-0}" = 1 ]; then
     # Nix assigns TMPDIR on every shell entry. Keep the caller's selected base
@@ -139,7 +242,30 @@ EOF
         CHAINMAN_ARCHIVE=$archive
         export CHAINMAN_ARCHIVE
     fi
-    store=$(nix_eval fetch)
+    # Fetch and register a normal Nix GC root in the same evaluator process.
+    # A bare `nix eval --raw` result loses its temporary root before the next
+    # `nix develop`, allowing automatic GC to remove even the runtime scripts.
+    if [ "${CHAINMAN_BOOTSTRAP_CONTAINER:-0}" = 1 ]; then
+        runtime_roots=/nix/var/nix/chainman-runtime-roots
+    else
+        runtime_roots=${XDG_CACHE_HOME:-$HOME/.cache}/chainman/runtime-roots
+    fi
+    single_line "$runtime_roots"
+    case "$runtime_roots" in /*) ;; *) fail 'Runtime cache must be an absolute path.' ;; esac
+    probe=$runtime_roots
+    while [ "$probe" != / ]; do
+        [ ! -L "$probe" ] || fail 'Runtime cache directories must not contain symlinks.'
+        probe=$(dirname -- "$probe")
+    done
+    (
+        umask 077
+        mkdir -p "$runtime_roots"
+    )
+    runtime_root=$runtime_roots/$_content_id
+    [ ! -e "$runtime_root" ] || [ -L "$runtime_root" ] || fail 'Runtime GC root must be a symlink.'
+    store=$(CHAINMAN_BOOTSTRAP_HELPER=$helper CHAINMAN_PROJECT_ROOT=$root CHAINMAN_BOOTSTRAP_ACTION=fetch \
+        "$nix_bin" --extra-experimental-features 'nix-command flakes' build --impure --expr "$expression" \
+        --out-link "$runtime_root" --print-out-paths)
     actual=$("$nix_bin" --extra-experimental-features nix-command hash path "$store")
     [ "$actual" = "$nar_hash" ] || fail 'Runtime store source failed NAR verification.'
     # Archives are source distributions: symlinks are excluded before evaluating
@@ -190,12 +316,18 @@ if [ "$engine" = docker ]; then
 $security_options
 EOF
 fi
-volume=chainman-nix-$uid
+volume=${CHAINMAN_NIX_VOLUME:-chainman-nix-$uid}
+case "$volume" in '' | *[!A-Za-z0-9_.-]*) fail 'CHAINMAN_NIX_VOLUME must be a container volume name.' ;; esac
+case "$volume" in [A-Za-z0-9]*) ;; *) fail 'CHAINMAN_NIX_VOLUME must start with a letter or number.' ;; esac
+export CHAINMAN_NIX_VOLUME="$volume"
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/chainman-bootstrap.XXXXXXXX")
 trap 'rm -rf -- "$temporary"' EXIT HUP INT TERM
 # Select an explicit architecture before initializing or evaluating in the image.
 # Its Nix store volume must not inherit the default architecture's profile links.
-platform=
+platform=${CHAINMAN_CONTAINER_PLATFORM:-}
+case "$platform" in '' | linux/amd64 | linux/arm64) ;; *) fail 'CHAINMAN_CONTAINER_PLATFORM must be linux/amd64 or linux/arm64.' ;; esac
+network_mode=${CHAINMAN_CONTAINER_NETWORK_MODE:-bridge}
+case "$network_mode" in host | bridge) ;; *) fail 'CHAINMAN_CONTAINER_NETWORK_MODE must be host or bridge.' ;; esac
 if [ -n "${CHAINMAN_CONTAINER_OPTIONS_FILE:-}" ]; then
     options_file=$CHAINMAN_CONTAINER_OPTIONS_FILE
     case "$options_file" in /*) ;; *) options_file=$root/$options_file ;; esac
@@ -210,11 +342,16 @@ if [ -n "${CHAINMAN_CONTAINER_OPTIONS_FILE:-}" ]; then
         IFS= read -r value || [ -n "$value" ] || fail 'Container option lacks a value.'
         if [ "$option" = --platform ]; then
             case "$value" in linux/amd64 | linux/arm64) ;; *) fail 'Container platform must be linux/amd64 or linux/arm64.' ;; esac
-            [ -z "$platform" ] || fail 'Container platform must be specified once.'
+            [ -z "$platform" ] || [ "$platform" = "$value" ] || fail 'Conflicting container platform selections.'
             platform=$value
+        elif [ "$option" = --network ]; then
+            case "$value" in host | bridge) ;; *) fail 'Explicit container network must be host or bridge.' ;; esac
+            [ -z "${CHAINMAN_CONTAINER_NETWORK_MODE:-}" ] || [ "$network_mode" = "$value" ] || fail 'Conflicting container network selections.'
+            network_mode=$value
         fi
     done < "$options_file"
 fi
+export CHAINMAN_CONTAINER_PLATFORM="$platform" CHAINMAN_CONTAINER_NETWORK_MODE="$network_mode"
 if [ -n "$platform" ]; then volume=$volume-${platform#linux/}; fi
 downloads_volume=${volume}-downloads
 run() {
@@ -256,7 +393,21 @@ if [ -n "${CHAINMAN_CONTAINER_NETWORK:-}" ]; then
     case "$CHAINMAN_CONTAINER_NETWORK" in *[!a-f0-9]*) fail 'Invalid owned network container identity.' ;; esac
     [ "${#CHAINMAN_CONTAINER_NETWORK}" = 64 ] || fail 'Invalid owned network container identity.'
     printf '%s\n' --network "container:$CHAINMAN_CONTAINER_NETWORK" >> "$temporary/options"
+elif [ -n "${CHAINMAN_CONTAINER_BRIDGE:-}" ] && [ "$network_mode" != host ]; then
+    bridge_key=${CHAINMAN_CONTAINER_BRIDGE#chainman-}
+    case "$bridge_key" in *[!a-f0-9]*) fail 'Invalid owned bridge identity.' ;; esac
+    [ "${#bridge_key}" = 24 ] && [ "$CHAINMAN_CONTAINER_BRIDGE" = "chainman-$bridge_key" ] || fail 'Invalid owned bridge identity.'
+    printf '%s\n' --network "$CHAINMAN_CONTAINER_BRIDGE" >> "$temporary/options"
+    if [ -n "${CHAINMAN_CONTAINER_ALIAS:-}" ]; then
+        alias_key=${CHAINMAN_CONTAINER_ALIAS#cm-}
+        case "$alias_key" in *[!a-f0-9]*) fail 'Invalid service DNS alias.' ;; esac
+        [ "${#alias_key}" = 24 ] && [ "$CHAINMAN_CONTAINER_ALIAS" = "cm-$alias_key" ] || fail 'Invalid service DNS alias.'
+        printf '%s\n' --network-alias "$CHAINMAN_CONTAINER_ALIAS" >> "$temporary/options"
+    fi
+else
+    printf '%s\n' --network "$network_mode" >> "$temporary/options"
 fi
+if [ -n "$platform" ]; then printf '%s\n' --platform "$platform" >> "$temporary/options"; fi
 env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' > "$temporary/names"
 printf '%s' "${CHAINMAN_FORWARD_ENV:-}" | tr ',' '\n' > "$temporary/patterns"
 printf '\n' >> "$temporary/patterns"
@@ -266,6 +417,8 @@ if [ -n "${CHAINMAN_CONTAINER_OPTIONS_FILE:-}" ]; then
         [ -n "$option" ] || continue
         case "$option" in --publish | -p | --mount | -v | --volume | --add-host | --hostname | --label | --name | --network | --platform) ;; *) fail "Unsupported container option: $option" ;; esac
         IFS= read -r value || fail 'Container option lacks a value.'
+        # These were normalized before planning and are already emitted above.
+        case "$option" in --platform | --network) continue ;; esac
         printf '%s\n%s\n' "$option" "$value" >> "$temporary/options"
     done < "$temporary/extra"
 fi
@@ -279,6 +432,26 @@ while IFS= read -r option; do
         --env-pattern)
             printf '%s\n' "$value" >> "$temporary/patterns"
             continue
+            ;;
+        --mount-env)
+            source_name=${value%%:*}
+            remainder=${value#*:}
+            target=${remainder%:*}
+            access=${remainder##*:}
+            case "$source_name" in '' | [!A-Za-z_]* | *[!A-Za-z0-9_]*) fail 'Invalid mount environment variable.' ;; esac
+            source=$(printenv "$source_name" && printf '.') || fail "Mount environment variable is unset: $source_name"
+            source=${source%.}
+            # Remove printenv's delimiter, preserving any newline in the value.
+            source=${source%?}
+            single_line "$source"
+            [ -n "$source" ] || fail "Mount environment variable is empty: $source_name"
+            case "$source" in /*) ;; *) source=$root/$source ;; esac
+            [ -n "$target" ] || target=$source
+            case "$access" in
+                ro) value="type=bind,src=$source,dst=$target,readonly" ;;
+                rw) value="type=bind,src=$source,dst=$target" ;;
+                *) fail 'Invalid mount access mode.' ;;
+            esac
             ;;
         --mount)
             case "$value" in type=bind,src=*,dst=*) ;; *) fail 'Only explicit bind mounts are accepted.' ;; esac
@@ -302,8 +475,16 @@ while IFS= read -r option; do
                 container:*)
                     [ -n "${CHAINMAN_CONTAINER_NETWORK:-}" ] && [ "$value" = "container:$CHAINMAN_CONTAINER_NETWORK" ] || fail 'Container network is not an owned service namespace.'
                     ;;
-                *) fail 'Container network must be host, bridge or a verified service namespace.' ;;
+                chainman-*)
+                    [ -n "${CHAINMAN_CONTAINER_BRIDGE:-}" ] && [ "$value" = "$CHAINMAN_CONTAINER_BRIDGE" ] || fail 'Container network is not an owned private bridge.'
+                    ;;
+                *) fail 'Container network must be host, bridge or a verified service network.' ;;
             esac
+            set -- "$option" "$value" "$@"
+            continue
+            ;;
+        --network-alias)
+            [ -n "${CHAINMAN_CONTAINER_ALIAS:-}" ] && [ "$value" = "$CHAINMAN_CONTAINER_ALIAS" ] || fail 'Container alias is not an owned service alias.'
             set -- "$option" "$value" "$@"
             continue
             ;;
@@ -312,7 +493,11 @@ while IFS= read -r option; do
             set -- "$option" "$value" "$@"
             continue
             ;;
-        --publish | -p | --add-host | --hostname | --label | --name)
+        --publish | -p)
+            if [ "$network_mode" != host ]; then set -- "$option" "$value" "$@"; fi
+            continue
+            ;;
+        --add-host | --hostname | --label | --name)
             set -- "$option" "$value" "$@"
             continue
             ;;
@@ -423,6 +608,7 @@ set -- --rm --init --interactive --user "$container_uid:$container_gid" --securi
     --mount "type=volume,src=$downloads_volume,dst=/chainman-downloads" --env TOOLCHAIN_DOWNLOAD_CACHE=/chainman-downloads \
     --workdir "$root" \
     --env HOME=/tmp/chainman-home --env CHAINMAN_MODE=container-nix --env CHAINMAN_BOOTSTRAP_CONTAINER=1 \
+    --env CHAINMAN_CONTAINER_PLATFORM --env CHAINMAN_CONTAINER_NETWORK_MODE --env CHAINMAN_NIX_VOLUME \
     --env 'NIX_CONFIG=build-users-group =' \
     --env "CHAINMAN_PROJECT_ROOT=$root" --env TOOLCHAIN_CONTAINER=1 --env "GIT_CONFIG_COUNT=$count" \
     --env "TOOLCHAIN_GIT_POLICY_UNAVAILABLE=$policy_unavailable" --env CI --env TERM \
