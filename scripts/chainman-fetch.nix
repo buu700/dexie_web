@@ -67,25 +67,53 @@ let
   mount =
     item:
     let
-      source = line item.source;
-      target = line item.target;
+      dynamic = item ? source_env;
+      source = if dynamic then line item.source_env else line item.source;
+      target = if dynamic && !(item ? target) then "" else line item.target;
       absolute = if b.substring 0 1 source == "/" then source else root + "/" + source;
+      readOnly = item.read_only or true;
     in
     if
-      b.match ".*,.*" (source + target) != null
-      || b.substring 0 1 target != "/"
-      || !(b.isBool (item.read_only or true))
+      (item ? source) == dynamic
+      || b.any (
+        name:
+        !(b.elem name [
+          "source"
+          "source_env"
+          "target"
+          "read_only"
+        ])
+      ) (b.attrNames item)
+      || b.match ".*,.*" (source + target) != null
+      || (target != "" && b.substring 0 1 target != "/")
+      || !(b.isBool readOnly)
+      || (
+        dynamic
+        && (
+          b.match "[A-Za-z_][A-Za-z0-9_]*" source == null
+          || b.match "(CHAINMAN|TOOLCHAIN)_.*" source != null
+          || b.elem source [
+            "SCCACHE_SERVER_UDS"
+            "RUSTC_WRAPPER"
+          ]
+        )
+      )
     then
-      fail "container mounts require comma-free source, absolute target, and boolean read_only"
+      fail "container mounts require one source/source_env, an absolute target, and boolean read_only"
+    else if dynamic then
+      [
+        "--mount-env"
+        "${source}:${target}:${if readOnly then "ro" else "rw"}"
+      ]
     else
       [
         "--mount"
-        "type=bind,src=${absolute},dst=${target}${if item.read_only or true then ",readonly" else ""}"
+        "type=bind,src=${absolute},dst=${target}${if readOnly then ",readonly" else ""}"
       ];
   request = b.getEnv "CHAINMAN_REQUEST_ACTION";
   requestedName = b.getEnv "CHAINMAN_REQUEST_TASK";
   transport =
-    if request == "_workflow-service" then
+    if request == "_workflow-service" || request == "_workflow-probe" then
       config.services.${requestedName}.transport or { }
     else if request == "_workflow-task" || request == "run" then
       config.tasks.${requestedName}.transport or { }
@@ -109,6 +137,12 @@ let
     );
   options =
     b.concatMap pattern (config.environment.pass or [ ])
+    # Context values originate in checked-in task declarations. Their names must
+    # also cross subsequent service/build container entries, without forwarding
+    # an undeclared wildcard or installing host inputs in the planner process.
+    ++ b.concatMap (task: b.concatMap pattern (b.attrNames (task.context_environment or { }))) (
+      b.attrValues (config.tasks or { })
+    )
     ++ containerOptions (config.container or { })
     ++ containerOptions transport;
   requestedTask = if request == "run" then b.getEnv "CHAINMAN_REQUEST_TASK" else request;
@@ -128,6 +162,7 @@ let
         "services-stop"
         "services-run"
         "services-up"
+        "services-reset"
       ]
     then
       true
@@ -137,6 +172,7 @@ let
         "_workflow-task"
         "_workflow-service"
         "_workflow-prepare"
+        "_service-prepare"
         "exec"
         "shell"
         "version"
