@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "version": "0.1.0",
-  "revision": "1567bd5b8b54f53e0744727946006a6aafb7446f",
+  "revision": "dfc2b5e3f6b14ece6b6ea18dbe839c4e96ae461f",
   "url": "https://github.com/chainmandev/chainman/releases/download/v0.1.0/chainman-0.1.0.tar.gz",
-  "narHash": "sha256-4GTvdgV4Rhh1AttfKtW1Anl/zUoDEAGe7urOxW7e86g=",
+  "narHash": "sha256-sAfs+peVVH5iR8pMTQ20v9yDEIlMo2FFwYDTAWnXbc4=",
   "bundled_archive": "vendor/chainman/chainman.tar.gz"
 }
