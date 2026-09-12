@@ -35,6 +35,7 @@ profile = "default"
 eligibility = "resolver"
 minimum_age_days = 30
 verify_task = "ci-local"
+reconcile_tasks = ["bundle"]
 outputs = [
     "assets/dexie.d.ts",
     "assets/dexie.min.js",
@@ -94,11 +95,6 @@ resolve = "flutter"
 [[updates.steps]]
 resolve = "github"
 
-[[updates.steps]]
-commands = [["just", "bundle"]]
-targets = ["js"]
-profile = "default"
-
 [tasks.bundle]
 commands = [["./tool/bundle.sh"]]
 setup = ["javascript"]
@@ -111,10 +107,6 @@ profile = "host"
 [tasks.bootstrap]
 commands = [["lefthook", "install"]]
 depends_on = ["bootstrap-ci"]
-
-[tasks.format]
-commands = [["dart", "format", "lib", "test", "example/lib", "example/test", "example/integration_test", "example/test_driver", "tool"], ["bash", "-eu", "-c", "npx prettier --write \"**/*.{json,js,html,yaml}\""]]
-setup = ["javascript"]
 
 [tasks.analyze]
 commands = [["flutter", "analyze", "--no-pub"]]
@@ -155,11 +147,11 @@ timeout_env = "E2E_TIMEOUT_SECONDS"
 shutdown_seconds = 15
 
 [tasks.check]
-depends_on = ["format", "parity-check", "analyze", "test-web", "test-tooling"]
+depends_on = ["format-check", "parity-check", "analyze", "test-web", "test-tooling"]
 profile = "host"
 
 [tasks.ci-local]
-depends_on = ["bootstrap-ci", "parity-check", "analyze", "test-web", "test-tooling", "e2e"]
+depends_on = ["bootstrap-ci", "format-check", "parity-check", "analyze", "test-web", "test-tooling", "e2e"]
 profile = "host"
 
 [tasks.publish-dry-run]
@@ -180,6 +172,15 @@ cleanup_children = true
 
 # Flutter's SDK integration runner uses the standard WebDriver protocol. Chainman
 # owns this foreground service and its browser children for the E2E task lifetime.
+
+[tasks.format-write]
+commands = [["dart", "format", "lib", "test", "example/lib", "example/test", "example/integration_test", "example/test_driver", "tool"], ["bash", "-eu", "-c", "npx prettier --write \"**/*.{json,js,html,yaml}\""]]
+setup = ["javascript"]
+
+[tasks.format-check]
+commands = [["dart", "format", "--output=none", "--set-exit-if-changed", "lib", "test", "example/lib", "example/test", "example/integration_test", "example/test_driver", "tool"], ["npx", "prettier", "--check", "**/*.{json,js,html,yaml}"]]
+setup = ["javascript", "dart", "example"]
+
 [services.chrome-driver]
 profile = "services"
 command = ["chromedriver", "--port=4444"]
@@ -189,3 +190,15 @@ command = ["curl", "--fail", "--silent", "http://127.0.0.1:4444/status"]
 period_seconds = 1
 timeout_seconds = 5
 failure_threshold = 30
+
+[recipes]
+format-write = ["format-write"]
+format-check = ["format-check"]
+generate = ["bundle"]
+clean = ["clean"]
+setup = ["bootstrap"]
+verify-lite = ["check"]
+verify = ["ci-local"]
+
+[dependencies]
+exclusions = []
