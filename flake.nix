@@ -22,6 +22,15 @@
           if isLinux then pkgs.chromium.version else "host Chrome (must match Nix ChromeDriver)";
       in
       {
+        # Service entry and probes need the matching driver, not Flutter's SDK
+        # startup commands or its shared tool lock.
+        devShells.services = pkgs.mkShellNoCC {
+          packages = [
+            pkgs.chromedriver
+            pkgs.curl
+          ];
+        };
+
         devShells.default = pkgs.mkShell {
           name = "dexie_web-dev";
 
