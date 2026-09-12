@@ -7,6 +7,9 @@ default_profile = "default"
 [profiles.default]
 flake = "flake.nix#default"
 
+[profiles.services]
+flake = "flake.nix#services"
+
 [environment]
 pass = ["CHROME_EXECUTABLE", "CI", "E2E_TIMEOUT_SECONDS", "LANG", "LC_ALL"]
 
@@ -178,8 +181,10 @@ cleanup_children = true
 # Flutter's SDK integration runner uses the standard WebDriver protocol. Chainman
 # owns this foreground service and its browser children for the E2E task lifetime.
 [services.chrome-driver]
+profile = "services"
 command = ["chromedriver", "--port=4444"]
 [services.chrome-driver.readiness]
+# WebDriver stays private to its shared test/container network namespace.
 command = ["curl", "--fail", "--silent", "http://127.0.0.1:4444/status"]
 period_seconds = 1
 timeout_seconds = 5
