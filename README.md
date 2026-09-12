@@ -25,6 +25,10 @@ remain; an independent inventory and a per-run nonce require fresh completion of
 every case. No global CLI, npm install in Pub packages, or browser download is
 needed. The deadline is 600 seconds; `E2E_TIMEOUT_SECONDS` accepts 1–86400 seconds.
 
+ChromeDriver and its readiness probe use a minimal service profile from the same
+Nix lock, avoiding Flutter SDK startup and tool locks on every probe. WebDriver
+remains private to the E2E task's shared container network namespace.
+
 On macOS, host Chrome must match the pinned ChromeDriver; the Linux container
 provides the complete pinned pair. `CHROME_EXECUTABLE` selects an explicit host
 browser. Run `just services-status` or `just services-stop` for interrupted E2E
