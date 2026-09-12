@@ -27,17 +27,15 @@ const opaqueArguments = [
   "Unicode λ",
   "--option",
 ];
-const commandName = 'named "command" $(touch unexpected-execution)';
-
 for (const [recipe, supplied, prefix] of [
-  ["exec", opaqueArguments, ["exec", "--profile", "default", "--"]],
-  ["run", [commandName, ...opaqueArguments], ["run", commandName]],
+  ["exec", opaqueArguments, ["exec", "--"]],
   ["deps-update", opaqueArguments, ["deps-update"]],
   ["chainman-update", opaqueArguments, ["chainman-update"]],
   ["e2e", opaqueArguments, ["run", "e2e", "--"]],
 ]) {
   for (const [mode, exit] of [
     [undefined, 0],
+    ["host-nix", 0],
     ["container-nix", 0],
     [undefined, 41],
   ]) {
@@ -50,13 +48,17 @@ for (const [recipe, supplied, prefix] of [
         new URL("../justfile", import.meta.url),
         join(project, "justfile"),
       );
+      copyFileSync(
+        new URL("../scripts/chainman.just", import.meta.url),
+        join(project, "scripts", "chainman.just"),
+      );
       const launcher = join(project, "scripts", "chainman.sh");
       writeFileSync(
         launcher,
         [
           "#!/usr/bin/env bash",
           "set -euo pipefail",
-          'printf \'%s\\0\' "$CHAINMAN_MODE" "$@" >"$JUST_ARGV_CAPTURE"',
+          'printf \'%s\\0\' "${CHAINMAN_MODE:-}" "$@" >"$JUST_ARGV_CAPTURE"',
           'exit "$JUST_ARGV_EXIT"',
           "",
         ].join("\n"),
@@ -84,9 +86,7 @@ for (const [recipe, supplied, prefix] of [
       assert.equal(result.status, exit, result.stderr);
       assert.deepEqual(
         readFileSync(capture),
-        Buffer.from(
-          [mode ?? "host-nix", ...prefix, ...opaqueArguments, ""].join("\0"),
-        ),
+        Buffer.from([mode ?? "", ...prefix, ...opaqueArguments, ""].join("\0")),
       );
       for (const path of [project, root])
         assert.equal(existsSync(join(path, "unexpected-execution")), false);

@@ -8,12 +8,12 @@ Development requires Git, Just, and either host Nix or Docker/Podman. The checke
 launcher verifies the pinned Chainman runtime in the Nix store. Host mode uses the
 installed compatible Nix; container mode uses Chainman's digest-pinned, unmodified
 upstream Nix image. Flutter, Dart, Node, Chromium and the other tools come from the
-project flake. Host Nix is the default; select `CHAINMAN_MODE=container-nix` to use
-a container without host Nix or Python.
+project flake. Container Nix is the default; select `CHAINMAN_MODE=host-nix` to use
+the installed host Nix.
 
-Use `just setup`, `just build`, `just test`, and `just verify`, or the retained
-`just run bootstrap`, `just run test-web`, `just run e2e`, and `just run ci-local`
-aliases. `chainman.toml` declares frozen npm, root Dart and example Dart setup
+Use `just setup`, `just build`, `just test`, and `just verify`. `just test-web`,
+`just test-tooling` and `just e2e` select individual test lanes. `chainman.toml`
+declares frozen npm, root Dart and example Dart setup
 groups. Chainman verifies their inputs and readiness artifacts and holds setup
 leases while tasks run. Download caches are shared; `just cache-status` and
 `just cache-prune` expose the common cache policy.
@@ -31,14 +31,21 @@ remains private to the E2E task's shared container network namespace.
 
 On macOS, host Chrome must match the pinned ChromeDriver; the Linux container
 provides the complete pinned pair. `CHROME_EXECUTABLE` selects an explicit host
-browser. Run `just services-status` or `just services-stop` for interrupted E2E
+browser. Run `just services-status` or `just stop` for interrupted E2E
 service recovery.
 
-`just dexie-update` performs an uncommitted npm update; `just deps-update` updates
-project dependencies transactionally and retains the runtime pin. Shared adapters
+`just generate` refreshes the bundled Dexie assets and SRI source. `just format`
+generates and formats in an isolated candidate, checks it, then commits the result;
+`just format-write` formats in place. `just verify` includes formatting and the full
+browser gate; `just verify-lite` omits the SDK integration-test lane.
+
+`just deps-update-js` selects npm dependencies; `just deps-update` updates
+all project dependencies transactionally and retains the runtime pin. Shared adapters
 update Nix inputs, npm dependencies, Dart packages and pinned GitHub Actions.
 New identities require 30 days of age and immutable registry evidence. The project
 retains npm and regenerates Dexie assets and SRI source before full verification.
+Updates commit the verified candidate by default; use `commit=off` to retain it
+without committing or `mode=dry-run` to leave the original untouched.
 `just chainman-update` deliberately advances the runtime and its container pin.
 
 `dexie_web` eliminates the friction of using IndexedDB in Flutter Web. It bundles the Dexie JS library directly into the package assets and automatically injects it at run-time with Subresource Integrity (SRI) enforced. No external CDN dependencies, no manual `<script>` tags in your `index.html`, and fully WASM-ready using modern `dart:js_interop`.

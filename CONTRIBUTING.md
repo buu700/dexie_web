@@ -146,7 +146,7 @@ just run format
 
 When preparing to publish a new version to pub.dev:
 
-1. Run `just dexie-update` to select the newest stable Dexie release that satisfies the 30-day maturity policy.
+1. Run `just deps-update-js` to select the newest stable Dexie release that satisfies the 30-day maturity policy.
 2. Run `just run ci-local` to verify all tests and analyzers pass.
 3. Document the changes in `CHANGELOG.md`.
 4. Bump the `version` in `pubspec.yaml`.

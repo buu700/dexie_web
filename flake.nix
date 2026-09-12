@@ -67,10 +67,10 @@
 
             echo ""
             echo "Available commands:"
-            echo "  just bootstrap"
+            echo "  just setup"
             echo "  just e2e"
             echo "  just test-web"
-            echo "  just run ci-local"
+            echo "  just verify"
           '';
         };
       }
