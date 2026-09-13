@@ -27,7 +27,15 @@ const opaqueArguments = [
   "Unicode λ",
   "--option",
 ];
+const ciCommand = readFileSync(
+  new URL("../.github/workflows/test.yml", import.meta.url),
+  "utf8",
+)
+  .match(/run: nix run --inputs-from \. nixpkgs#just -- (.+)/)[1]
+  .trim()
+  .split(/\s+/);
 for (const [recipe, supplied, prefix] of [
+  [ciCommand[0], [...ciCommand.slice(1), ...opaqueArguments], ["run", "ci-local"]],
   ["exec", opaqueArguments, ["exec", "--"]],
   ["deps-update", opaqueArguments, ["deps-update"]],
   ["chainman-update", opaqueArguments, ["chainman-update"]],
