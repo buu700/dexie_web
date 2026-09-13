@@ -28,6 +28,9 @@ needed. The deadline is 600 seconds; `E2E_TIMEOUT_SECONDS` accepts 1–86400 sec
 ChromeDriver and its readiness probe use a minimal service profile from the same
 Nix lock, avoiding Flutter SDK startup and tool locks on every probe. WebDriver
 remains private to the E2E task's shared container network namespace.
+Each readiness attempt allows 30 seconds for bootstrap, Nix profile entry and a
+two-second HTTP request, with six failed attempts ending startup. This includes
+environment entry in the deadline rather than treating it as free overhead.
 
 On macOS, host Chrome must match the pinned ChromeDriver; the Linux container
 provides the complete pinned pair. `CHROME_EXECUTABLE` selects an explicit host

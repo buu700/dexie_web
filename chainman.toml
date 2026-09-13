@@ -186,10 +186,12 @@ profile = "services"
 command = ["chromedriver", "--port=4444"]
 [services.chrome-driver.readiness]
 # WebDriver stays private to its shared test/container network namespace.
-command = ["curl", "--fail", "--silent", "http://127.0.0.1:4444/status"]
+# The outer deadline includes bootstrap and Nix profile entry; bound the HTTP
+# request separately so an unresponsive endpoint does not consume that allowance.
+command = ["curl", "--fail", "--silent", "--max-time", "2", "http://127.0.0.1:4444/status"]
 period_seconds = 1
-timeout_seconds = 5
-failure_threshold = 30
+timeout_seconds = 30
+failure_threshold = 6
 
 [recipes]
 format-write = ["format-write"]
