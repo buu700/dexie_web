@@ -20,7 +20,7 @@ jobs:
       - name: Verify
         env:
           E2E_TIMEOUT_SECONDS: "900"
-        run: nix run --inputs-from . nixpkgs#just -- run ci-local
+        run: nix run --inputs-from . nixpkgs#just -- verify
 
       - name: Upload E2E artifacts on failure
         if: failure()

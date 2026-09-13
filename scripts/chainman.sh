@@ -16,6 +16,17 @@ single_line() {
     case "$1" in *'
 '* | *''*) fail 'Newlines are not supported in bootstrap paths or options.' ;; esac
 }
+develop_runtime() {
+    develop_action=$1
+    shift
+    set -- "$nix_bin" --extra-experimental-features 'nix-command flakes' develop "path:$store/nix#bootstrap" --no-write-lock-file --command "$@"
+    # The primary nixpkgs input no longer supplies Intel macOS Bash. Make the
+    # compatibility input's Bash available before Nix executes its shell script.
+    if [ "$(uname -s)-$(uname -m)" = Darwin-x86_64 ]; then
+        set -- "$nix_bin" --extra-experimental-features 'nix-command flakes' shell "path:$store/nix#bash" --no-write-lock-file --command "$@"
+    fi
+    if [ "$develop_action" = exec ]; then exec "$@"; else "$@"; fi
+}
 script_dir=$(CDPATH='' cd -P -- "$(dirname -- "$0")" && pwd)
 self=$script_dir/$(basename -- "$0")
 root=$(CDPATH='' cd -P -- "${CHAINMAN_PROJECT_ROOT:-$script_dir/..}" && pwd)
@@ -165,6 +176,10 @@ update_dispatch() {
             "$self" _update-resume "$update_output" >&2
         set --
         while IFS= read -r update_argument; do set -- "$@" "$update_argument"; done < "$update_output/control/resume-arguments"
+        if [ -f "$update_output/control/retry-runtime" ]; then
+            IFS= read -r update_retry_runtime < "$update_output/control/retry-runtime"
+            if [ "$update_retry_runtime" = yes ]; then update_resume=0; fi
+        fi
     else
         CHAINMAN_FORWARD_ENV='' CHAINMAN_CONTAINER_OPTIONS_FILE=$update_output/control/mounts \
             "$self" _update-prepare "$update_output" "$@" >&2
@@ -177,14 +192,22 @@ update_dispatch() {
     IFS= read -r update_at < "$update_output/control/at"
     update_launcher=$update_output/original-bootstrap/chainman.sh
     if [ "$update_resume" = 0 ]; then
-        update_candidate "$update_launcher" _update-resolve "$update_at" "$@" >&2
+        CHAINMAN_FORWARD_ENV='' CHAINMAN_CONTAINER_OPTIONS_FILE=$update_output/control/mounts \
+            CHAINMAN_PROJECT_ROOT=$root "$update_launcher" _update-runtime "$update_output" >&2
     fi
-    update_candidate "$update_launcher" _update-tasks "$@" > "$update_output/control/tasks"
+    update_resolver=$update_launcher
+    if [ -f "$update_output/resolution-bootstrap/chainman.sh" ]; then
+        update_resolver=$update_output/resolution-bootstrap/chainman.sh
+    fi
+    if [ "$update_resume" = 0 ]; then
+        update_candidate "$update_resolver" _update-resolve "$update_at" "$@" >&2
+    fi
+    update_candidate "$update_resolver" _update-tasks "$@" > "$update_output/control/tasks"
     while IFS= read -r update_task; do
-        CHAINMAN_UPDATE_ACTIVE=1 update_candidate "$update_launcher" run "$update_task" < /dev/null >&2
+        CHAINMAN_UPDATE_ACTIVE=1 update_candidate "$update_resolver" run "$update_task" < /dev/null >&2
     done < "$update_output/control/tasks"
     if [ "$update_resume" = 1 ] || [ -s "$update_output/control/tasks" ]; then
-        update_candidate "$update_launcher" _update-reaudit "$update_at" "$@" >&2
+        update_candidate "$update_resolver" _update-reaudit "$update_at" "$@" >&2
     fi
     CHAINMAN_FORWARD_ENV='' CHAINMAN_CONTAINER_OPTIONS_FILE=$update_output/control/mounts \
         CHAINMAN_PROJECT_ROOT=$root "$update_launcher" _update-inspect "$update_output" >&2
@@ -353,8 +376,11 @@ EOF
     [ "$(readlink "$runtime_root")" = "$store" ] || fail 'Runtime GC root does not match the verified source.'
     # A process killed between creating the link and registering its indirect
     # root must not leave a permanently unregistered warm-cache entry.
-    registered_roots=$("$CHAINMAN_RUNTIME_NIX_BIN/nix-store" --query --roots "$store")
-    if ! printf '%s\n' "$registered_roots" | grep -F -x -q -- "$runtime_root -> $store"; then
+    # Concurrent Nix root inventories can race while marking stale temporary
+    # roots. An unavailable inventory leaves registration unconfirmed, just like
+    # a missing entry. Re-fetch and register successfully before dispatching.
+    if ! registered_roots=$("$CHAINMAN_RUNTIME_NIX_BIN/nix-store" --query --roots "$store") \
+        || ! printf '%s\n' "$registered_roots" | grep -F -x -q -- "$runtime_root -> $store"; then
         store=$(fetch_runtime --out-link "$runtime_root")
     fi
     actual=$("$nix_bin" --extra-experimental-features nix-command hash path "$store")
@@ -364,8 +390,7 @@ EOF
     [ -z "$(find "$store" -type l -print -quit)" ] || fail 'Runtime archives must not contain symlinks.'
     if [ "${CHAINMAN_BOOTSTRAP_CONTAINER:-0}" != 1 ]; then
         if [ "$(nix_eval schema)" = 3 ]; then
-            route=$("$nix_bin" --extra-experimental-features 'nix-command flakes' develop "path:$store/nix#bootstrap" --no-write-lock-file \
-                --command python3 -B "$store/scripts/bootstrap_plan.py" "$root" route)
+            route=$(develop_runtime run python3 -B "$store/scripts/bootstrap_plan.py" "$root" route)
         else
             route=$(nix_eval route)
         fi
@@ -375,8 +400,7 @@ EOF
     # Bootstrap entry replaces an external project shell. Its old profile token no
     # longer describes PATH, even when the project inputs themselves are unchanged.
     unset IN_NIX_SHELL CHAINMAN_ACTIVE_PROFILE CHAINMAN_ACTIVE_FINGERPRINT
-    exec "$nix_bin" --extra-experimental-features 'nix-command flakes' develop "path:$store/nix#bootstrap" --no-write-lock-file \
-        --command python3 -c '
+    develop_runtime exec python3 -c '
 import os, sys
 root, store, *args = sys.argv[1:]
 os.chdir(root)
@@ -466,13 +490,26 @@ container_init='
 '
 daemon_name=$volume-daemon
 validate_daemon() {
+    expected_image=$image
+    expected_pid=''
+    capability_fields='{{.HostConfig.CapDrop}}'
+    expected_capabilities='[ALL]'
+    if [ "$engine" = podman ]; then
+        # Podman canonicalizes tag@digest to digest and resolves --cap-drop ALL
+        # into its capability sets. Compare its resulting empty sets directly.
+        expected_image=${image%@*}
+        expected_image=${expected_image%:*}@${image#*@}
+        expected_pid=private
+        capability_fields='{{.EffectiveCaps}} {{.BoundingCaps}}'
+        expected_capabilities='[] []'
+    fi
     daemon_identity=$("$engine" container inspect --format '{{index .Config.Labels "dev.chainman.store.schema"}}
 {{index .Config.Labels "dev.chainman.store.volume"}}
 {{.Config.Image}}
 {{.Config.User}}
 {{.HostConfig.Privileged}}
 {{.HostConfig.ReadonlyRootfs}}
-{{.HostConfig.CapDrop}}
+'"$capability_fields"'
 {{.HostConfig.SecurityOpt}}
 {{range .Mounts}}{{.Type}}:{{.Name}}:{{.Destination}}:{{.RW}};{{end}}
 {{len .HostConfig.PortBindings}}
@@ -480,20 +517,26 @@ validate_daemon() {
 pid={{.HostConfig.PidMode}}' "$daemon_name")
     expected_identity="1
 $volume
-$image
+$expected_image
 $container_uid:$container_gid
 false
 true
-[ALL]
+$expected_capabilities
 [no-new-privileges]
 volume:$volume:/nix:true;
 0
 bridge
-pid="
+pid=$expected_pid"
     [ "$daemon_identity" = "$expected_identity" ] || fail "Nix store daemon $daemon_name has incompatible identity or isolation. Stop its clients and remove that daemon container before changing its configuration; retain the Nix volume."
 }
 if "$engine" container inspect "$daemon_name" > /dev/null 2>&1; then validate_daemon; fi
-volume_clients=$("$engine" ps --filter "volume=$volume" --format '{{.ID}} {{.Label "dev.chainman.store.schema"}}')
+if [ "$engine" = podman ]; then
+    # Podman 4.x has no Docker-compatible .Label template accessor. Its negative
+    # label filter selects the same incompatible clients in one engine snapshot.
+    volume_clients=$("$engine" ps --filter "volume=$volume" --filter 'label!=dev.chainman.store.schema=1' --format '{{.ID}}')
+else
+    volume_clients=$("$engine" ps --filter "volume=$volume" --format '{{.ID}} {{.Label "dev.chainman.store.schema"}}')
+fi
 while IFS= read -r client; do
     case "$client" in '' | *' 1') ;; *) fail 'Stop existing containers using this Nix volume before migrating from independent local-store writers to the shared daemon.' ;; esac
 done << EOF
@@ -823,7 +866,7 @@ set -- --rm --init --interactive --user "$container_uid:$container_gid" --label 
     --workdir "$root" \
     --env "CHAINMAN_TIMING=${CHAINMAN_TIMING:-0}" --env "CHAINMAN_TIMING_BOOTSTRAP_STARTED=${CHAINMAN_TIMING_BOOTSTRAP_STARTED:-}" --env "CHAINMAN_TIMING_PARENT=${CHAINMAN_TIMING_PARENT:-}" \
     --env HOME=/tmp/chainman-home --env CHAINMAN_MODE=container-nix --env CHAINMAN_BOOTSTRAP_CONTAINER=1 \
-    --env CHAINMAN_CONTAINER_PLATFORM --env CHAINMAN_CONTAINER_NETWORK_MODE --env CHAINMAN_NIX_VOLUME --env CHAINMAN_UPDATE_ACTIVE \
+    --env CHAINMAN_CONTAINER_PLATFORM --env CHAINMAN_CONTAINER_NETWORK_MODE --env CHAINMAN_NIX_VOLUME --env CHAINMAN_UPDATE_ACTIVE --env CHAINMAN_CONTEXT_TASK \
     --env 'NIX_CONFIG=build-users-group =
 store = daemon' --env NIX_REMOTE=daemon \
     --env "CHAINMAN_PROJECT_ROOT=$root" --env TOOLCHAIN_CONTAINER=1 --env "GIT_CONFIG_COUNT=$count" \

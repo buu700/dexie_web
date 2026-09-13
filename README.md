@@ -39,14 +39,15 @@ generates and formats in an isolated candidate, checks it, then commits the resu
 `just format-write` formats in place. `just verify` includes formatting and the full
 browser gate; `just verify-lite` omits the SDK integration-test lane.
 
-`just deps-update-js` selects npm dependencies; `just deps-update` updates
-all project dependencies transactionally and retains the runtime pin. Shared adapters
+`just deps-update-js` selects npm dependencies and retains the runtime pin;
+`just deps-update` updates all project dependencies and the Chainman pin transactionally.
+Use `just deps-update --skip-chainman` to retain the runtime during a full project update. Shared adapters
 update Nix inputs, npm dependencies, Dart packages and pinned GitHub Actions.
 New identities require 30 days of age and immutable registry evidence. The project
 retains npm and regenerates Dexie assets and SRI source before full verification.
 Updates commit the verified candidate by default; use `commit=off` to retain it
 without committing or `mode=dry-run` to leave the original untouched.
-`just chainman-update` deliberately advances the runtime and its container pin.
+`just chainman-update` selects a runtime-only update, including its container pin.
 
 `dexie_web` eliminates the friction of using IndexedDB in Flutter Web. It bundles the Dexie JS library directly into the package assets and automatically injects it at run-time with Subresource Integrity (SRI) enforced. No external CDN dependencies, no manual `<script>` tags in your `index.html`, and fully WASM-ready using modern `dart:js_interop`.
 
@@ -182,5 +183,6 @@ await ensureDexieInitialized(
 ```
 
 The bundled runtime supports development before its public release. An explicit
-`just chainman-update` requires an eligible public release; ordinary dependency
-updates do not query or replace the runtime pin.
+`just chainman-update` or full `just deps-update` requires an eligible public release.
+Until those releases are available, use `just deps-update --skip-chainman` or a
+targeted dependency update to retain the bundled runtime.
