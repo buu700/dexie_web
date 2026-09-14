@@ -185,7 +185,7 @@ await ensureDexieInitialized(
 );
 ```
 
-The bundled runtime supports development before its public release. An explicit
-`just chainman-update` or full `just deps-update` requires an eligible public release.
-Until those releases are available, use `just deps-update --skip-chainman` or a
-targeted dependency update to retain the bundled runtime.
+Chainman v0.1.0 is fetched from its public GitHub release and verified against the
+URL-only pin in `chainman.lock`. Automatic runtime updates retain the 30-day age
+policy. While the first release matures, use `just deps-update --skip-chainman` or a
+targeted dependency update to update project dependencies independently.
