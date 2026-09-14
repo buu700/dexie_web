@@ -169,8 +169,11 @@ update_dispatch() {
     esac
     update_output=$(CDPATH='' cd -P -- "$update_output" && pwd)
     trap 'printf "Chainman: candidate preserved at %s/candidate; resume with: just deps-update resume=%s\n" "$update_output" "$update_output" >&2' EXIT
-    if [ "$update_resume" = 0 ]; then mkdir "$update_output/candidate" "$update_output/control"; fi
+    if [ "$update_resume" = 0 ]; then
+        mkdir "$update_output/candidate" "$update_output/control"
+    fi
     printf '%s\n%s\n' --mount "type=bind,src=$update_output,dst=$update_output" > "$update_output/control/mounts"
+    : > "$update_output/control/candidate-mounts"
     if [ "$update_resume" = 1 ]; then
         CHAINMAN_FORWARD_ENV='' CHAINMAN_CONTAINER_OPTIONS_FILE=$update_output/control/mounts \
             "$self" _update-resume "$update_output" >&2
@@ -189,6 +192,9 @@ update_dispatch() {
         trap - EXIT
         exit 0
     fi
+    workspace_transactions=$update_output/candidate/.chainman-workspace-transactions
+    [ -d "$workspace_transactions" ] && [ ! -L "$workspace_transactions" ] || fail 'Workspace transaction root must be a real candidate directory.'
+    [ "$(CDPATH='' cd -P -- "$workspace_transactions" && pwd)" = "$workspace_transactions" ] || fail 'Workspace transaction root must not contain symlinks.'
     IFS= read -r update_at < "$update_output/control/at"
     update_launcher=$update_output/original-bootstrap/chainman.sh
     if [ "$update_resume" = 0 ]; then
@@ -230,9 +236,11 @@ update_candidate() (
     for update_git in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
         unset "$update_git"
     done
-    exec env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=2 \
-        GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=false GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1=/dev/null GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 \
-        CHAINMAN_PROJECT_ROOT="$update_output/candidate" "$@"
+    exec env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=4 \
+        GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=false GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1=/dev/null \
+        GIT_CONFIG_KEY_2=gc.auto GIT_CONFIG_VALUE_2=0 GIT_CONFIG_KEY_3=maintenance.auto GIT_CONFIG_VALUE_3=false \
+        GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 CHAINMAN_CONTAINER_OPTIONS_FILE="$update_output/control/candidate-mounts" \
+        CHAINMAN_WORKSPACE_TRANSACTION_ROOT="$workspace_transactions" CHAINMAN_PROJECT_ROOT="$update_output/candidate" "$@"
 )
 expression='import (builtins.toPath (builtins.getEnv "CHAINMAN_BOOTSTRAP_HELPER")) {
     root = builtins.getEnv "CHAINMAN_PROJECT_ROOT";
@@ -254,6 +262,21 @@ fi
 cd "$root"
 [ -f chainman.lock ] && [ ! -L chainman.lock ] || fail 'Missing regular chainman.lock.'
 [ ! -L "$root/.chainman" ] || fail '.chainman must be a real directory.'
+if [ -z "${CHAINMAN_WORKSPACE_TRANSACTION_ROOT:-}" ]; then
+    CHAINMAN_WORKSPACE_TRANSACTION_ROOT=$root/.chainman/workspace-transactions
+fi
+case "$CHAINMAN_WORKSPACE_TRANSACTION_ROOT" in
+    "$root/.chainman/workspace-transactions" | "$root/.chainman-workspace-transactions") ;;
+    *) fail 'Workspace transaction root must be owned by the selected project.' ;;
+esac
+[ ! -L "$CHAINMAN_WORKSPACE_TRANSACTION_ROOT" ] || fail 'Workspace transaction root must not be a symlink.'
+if [ -e "$CHAINMAN_WORKSPACE_TRANSACTION_ROOT" ]; then
+    [ -d "$CHAINMAN_WORKSPACE_TRANSACTION_ROOT" ] || fail 'Workspace transaction root must be a directory.'
+    [ "$(CDPATH='' cd -P -- "$CHAINMAN_WORKSPACE_TRANSACTION_ROOT" && pwd)" = "$CHAINMAN_WORKSPACE_TRANSACTION_ROOT" ] || fail 'Workspace transaction root must not contain symlinks.'
+elif [ "$CHAINMAN_WORKSPACE_TRANSACTION_ROOT" != "$root/.chainman/workspace-transactions" ]; then
+    fail 'Candidate workspace transaction root must already exist.'
+fi
+export CHAINMAN_WORKSPACE_TRANSACTION_ROOT
 
 case "$CHAINMAN_REQUEST_ACTION" in
     deps-update | chainman-update | format)
@@ -504,6 +527,7 @@ validate_daemon() {
         expected_capabilities='[] []'
     fi
     daemon_identity=$("$engine" container inspect --format '{{index .Config.Labels "dev.chainman.store.schema"}}
+{{index .Config.Labels "dev.chainman.store.gc"}}
 {{index .Config.Labels "dev.chainman.store.volume"}}
 {{.Config.Image}}
 {{.Config.User}}
@@ -516,6 +540,7 @@ validate_daemon() {
 {{.HostConfig.NetworkMode}}
 pid={{.HostConfig.PidMode}}' "$daemon_name")
     expected_identity="1
+1
 $volume
 $expected_image
 $container_uid:$container_gid
@@ -527,7 +552,7 @@ volume:$volume:/nix:true;
 0
 bridge
 pid=$expected_pid"
-    [ "$daemon_identity" = "$expected_identity" ] || fail "Nix store daemon $daemon_name has incompatible identity or isolation. Stop its clients and remove that daemon container before changing its configuration; retain the Nix volume."
+    [ "$daemon_identity" = "$expected_identity" ] || fail "Nix store daemon $daemon_name has incompatible identity or isolation (including its GC policy). Stop its clients and remove that daemon container before changing its configuration; retain the Nix volume."
 }
 if "$engine" container inspect "$daemon_name" > /dev/null 2>&1; then validate_daemon; fi
 if [ "$engine" = podman ]; then
@@ -546,7 +571,14 @@ EOF
 run --rm --user 0:0 --label dev.chainman.store.schema=1 --mount "type=volume,src=$volume,dst=/nix" --mount "type=volume,src=$downloads_volume,dst=/chainman-downloads" "$image" sh -eu -c '
     mkdir -p /nix/store /nix/var
     chown "$1:$2" /nix /nix/store
-    [ ! -d /nix/store/.links ] || chown "$1:$2" /nix/store/.links
+    # An empty engine volume inherits root-owned paths from the upstream image.
+    # Old image paths become garbage after upgrades; a mapped-user daemon cannot
+    # chmod/delete them unless ownership was normalized too. Inspect top-level
+    # entries on warm starts, traversing the store only for initialization/repair.
+    # Never dereference store symlinks into other locations.
+    if [ -n "$(find /nix/store -mindepth 1 -maxdepth 1 ! -user "$1" -print -quit)" ]; then
+        chown -hR "$1:$2" /nix/store
+    fi
     if [ "$(stat -c %u:%g /nix/var)" != "$1:$2" ]; then chown -R "$1:$2" /nix/var; fi
     chown "$1:$2" /chainman-downloads
 ' sh "$container_uid" "$container_gid"
@@ -557,10 +589,13 @@ if ! "$engine" container inspect "$daemon_name" > /dev/null 2>&1; then
     run --detach --name "$daemon_name" --init --read-only --network bridge \
         --user "$container_uid:$container_gid" --security-opt no-new-privileges --cap-drop ALL \
         --label dev.chainman.store.schema=1 --label "dev.chainman.store.volume=$volume" \
+        --label dev.chainman.store.gc=1 \
         --mount "type=volume,src=$volume,dst=/nix" \
         --env HOME=/nix/var/nix/chainman-daemon-home --env TMPDIR=/nix/tmp \
         --env 'NIX_CONFIG=build-users-group =
-trusted-users = *' \
+trusted-users = *
+min-free = 8589934592
+max-free = 17179869184' \
         "$image" sh -eu -c 'mkdir -p "$HOME" "$TMPDIR"; exec nix-daemon --daemon' \
         > /dev/null 2> "$temporary/daemon-create" || {
         # Container creation is atomic; a concurrent bootstrap can win the name.
@@ -793,8 +828,9 @@ if [ "$authority" != "$root" ]; then
         set -- --mount "type=bind,src=$git_directory,dst=$git_directory,readonly" "$@"
     done < "$authority/git-directories"
     set -- --env GIT_CONFIG_GLOBAL=/dev/null --env GIT_CONFIG_SYSTEM=/dev/null --env GIT_CONFIG_NOSYSTEM=1 --env GIT_OPTIONAL_LOCKS=0 "$@"
-    count=2
-    set -- --env GIT_CONFIG_KEY_0=core.fsmonitor --env GIT_CONFIG_VALUE_0=false --env GIT_CONFIG_KEY_1=core.hooksPath --env GIT_CONFIG_VALUE_1=/dev/null "$@"
+    count=4
+    set -- --env GIT_CONFIG_KEY_0=core.fsmonitor --env GIT_CONFIG_VALUE_0=false --env GIT_CONFIG_KEY_1=core.hooksPath --env GIT_CONFIG_VALUE_1=/dev/null \
+        --env GIT_CONFIG_KEY_2=gc.auto --env GIT_CONFIG_VALUE_2=0 --env GIT_CONFIG_KEY_3=maintenance.auto --env GIT_CONFIG_VALUE_3=false "$@"
 elif command -v git > /dev/null 2>&1; then
     git_owner=$(git -C "$root" rev-parse --show-toplevel 2> /dev/null) || git_owner=
     if [ -n "$git_owner" ]; then
@@ -867,6 +903,7 @@ set -- --rm --init --interactive --user "$container_uid:$container_gid" --label 
     --env "CHAINMAN_TIMING=${CHAINMAN_TIMING:-0}" --env "CHAINMAN_TIMING_BOOTSTRAP_STARTED=${CHAINMAN_TIMING_BOOTSTRAP_STARTED:-}" --env "CHAINMAN_TIMING_PARENT=${CHAINMAN_TIMING_PARENT:-}" \
     --env HOME=/tmp/chainman-home --env CHAINMAN_MODE=container-nix --env CHAINMAN_BOOTSTRAP_CONTAINER=1 \
     --env CHAINMAN_CONTAINER_PLATFORM --env CHAINMAN_CONTAINER_NETWORK_MODE --env CHAINMAN_NIX_VOLUME --env CHAINMAN_UPDATE_ACTIVE --env CHAINMAN_CONTEXT_TASK \
+    --env CHAINMAN_WORKSPACE_TRANSACTION_ROOT \
     --env 'NIX_CONFIG=build-users-group =
 store = daemon' --env NIX_REMOTE=daemon \
     --env "CHAINMAN_PROJECT_ROOT=$root" --env TOOLCHAIN_CONTAINER=1 --env "GIT_CONFIG_COUNT=$count" \
