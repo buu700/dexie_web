@@ -185,7 +185,8 @@ await ensureDexieInitialized(
 );
 ```
 
-Chainman v0.1.0 is fetched from its public GitHub release and verified against the
-URL-only pin in `chainman.lock`. Automatic runtime updates retain the 30-day age
+Chainman is fetched from `github.com/chainmandev/chainman` at the exact Git
+commit in `chainman.lock`. The small `just chainman` recipe is project-local;
+no global installation or permanent Chainman checkout is required. Automatic runtime updates retain the 30-day age
 policy. While the first release matures, use `just deps-update --skip-chainman` or a
 targeted dependency update to update project dependencies independently.

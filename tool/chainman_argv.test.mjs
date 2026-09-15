@@ -35,10 +35,14 @@ const ciCommand = readFileSync(
   .trim()
   .split(/\s+/);
 for (const [recipe, supplied, prefix] of [
-  [ciCommand[0], [...ciCommand.slice(1), ...opaqueArguments], ["run", "ci-local"]],
-  ["exec", opaqueArguments, ["exec", "--"]],
-  ["deps-update", opaqueArguments, ["deps-update"]],
-  ["chainman-update", opaqueArguments, ["chainman-update"]],
+  [
+    ciCommand[0],
+    [...ciCommand.slice(1), ...opaqueArguments],
+    ["recipe", "verify"],
+  ],
+  ["exec", opaqueArguments, ["recipe", "exec"]],
+  ["deps-update", opaqueArguments, ["recipe", "deps-update"]],
+  ["chainman-update", opaqueArguments, ["recipe", "chainman-update"]],
   ["e2e", opaqueArguments, ["run", "e2e", "--"]],
 ]) {
   for (const [mode, exit] of [
@@ -56,11 +60,15 @@ for (const [recipe, supplied, prefix] of [
         new URL("../justfile", import.meta.url),
         join(project, "justfile"),
       );
-      copyFileSync(
-        new URL("../scripts/chainman.just", import.meta.url),
-        join(project, "scripts", "chainman.just"),
+      const fixtureJustfile = join(project, "justfile");
+      writeFileSync(
+        fixtureJustfile,
+        readFileSync(fixtureJustfile, "utf8").replace(
+          /chainman \+args:\n(?: {4}.*\n)+/,
+          'chainman +args:\n    #!/bin/sh\n    exec ./scripts/record-entry.sh "$@"\n',
+        ),
       );
-      const launcher = join(project, "scripts", "chainman.sh");
+      const launcher = join(project, "scripts", "record-entry.sh");
       writeFileSync(
         launcher,
         [
