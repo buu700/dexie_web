@@ -187,6 +187,7 @@ await ensureDexieInitialized(
 
 Chainman is fetched from `github.com/chainmandev/chainman` at the exact Git
 commit in `chainman.lock`. The small `just chainman` recipe is project-local;
-no global installation or permanent Chainman checkout is required. Automatic runtime updates retain the 30-day age
-policy. While the first release matures, use `just deps-update --skip-chainman` or a
-targeted dependency update to update project dependencies independently.
+no global installation or permanent Chainman checkout is required. Runtime updates select the public default-branch SHA immediately and keep it frozen
+through verification and resume. Ordinary launches stay pinned. Project dependencies
+retain the 30-day policy; use `just deps-update --skip-chainman` or a targeted update
+to update them independently.
