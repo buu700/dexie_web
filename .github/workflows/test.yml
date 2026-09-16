@@ -20,6 +20,7 @@ jobs:
       - name: Verify
         env:
           E2E_TIMEOUT_SECONDS: "900"
+          CHAINMAN_SETUP: auto
         run: nix run --inputs-from . nixpkgs#just -- verify
 
       - name: Upload E2E artifacts on failure

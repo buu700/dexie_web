@@ -18,6 +18,14 @@ groups. Chainman verifies their inputs and readiness artifacts and holds setup
 leases while tasks run. Download caches are shared; `just cache-status` and
 `just cache-prune` expose the common cache policy.
 
+`just setup` prepares all three installation groups. Ordinary commands check their
+required groups first and ask before repairing them. Without a controlling terminal,
+run setup explicitly or authorize CI repairs with `CHAINMAN_SETUP=auto`.
+`CHAINMAN_SETUP=error` forbids implicit repairs. Inspect failures with
+`just chainman setup-status`; use `just chainman setup javascript`, `dart`, or
+`example` for focused recovery. These groups retain npm/Dart installation and artifact
+checks; they do not use pnpm.
+
 E2E uses Flutter's SDK `integration_test` runner in profile mode with a Nix-pinned
 Chromium/ChromeDriver pair. Chainman starts ChromeDriver, waits for readiness, and
 owns the service and task cleanup. The same six browser/IndexedDB/SRI assertions
