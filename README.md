@@ -199,3 +199,9 @@ no global installation or permanent Chainman checkout is required. Runtime updat
 through verification and resume. Ordinary launches stay pinned. Project dependencies
 retain the 30-day policy; use `just deps-update --skip-chainman` or a targeted update
 to update them independently.
+
+## Development configuration
+
+Chainman declarations are organized in [project-owned TOML modules](chainman/README.md),
+listed by `chainman.toml`. Use that guide to locate environments, setup, tasks and
+dependency policy.

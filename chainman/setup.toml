@@ -1,0 +1,16 @@
+[setup.javascript]
+inputs = ["package.json", "package-lock.json"]
+artifacts = ["node_modules/dexie/dist/dexie.min.js", "node_modules/.package-lock.json"]
+commands = [["npm", "ci", "--ignore-scripts"]]
+
+[setup.dart]
+inputs = ["pubspec.yaml", "pubspec.lock"]
+artifacts = [".dart_tool/package_config.json"]
+commands = [["flutter", "clean"], ["flutter", "pub", "get", "--enforce-lockfile"]]
+
+[setup.example]
+depends_on = ["dart"]
+directory = "example"
+inputs = ["pubspec.yaml", "pubspec.lock", "example/pubspec.yaml", "example/pubspec.lock"]
+artifacts = ["example/.dart_tool/package_config.json"]
+commands = [["rm", "-f", "test_bundle.dart"], ["flutter", "clean"], ["flutter", "pub", "get", "--enforce-lockfile"]]

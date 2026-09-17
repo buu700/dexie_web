@@ -1,0 +1,94 @@
+[tasks.bundle]
+commands = [["./tool/bundle.sh"]]
+setup = ["javascript"]
+
+[tasks.bootstrap-ci]
+setup = ["dart", "example"]
+depends_on = ["bundle"]
+profile = "host"
+
+[tasks.bootstrap]
+commands = [["lefthook", "install"]]
+depends_on = ["bootstrap-ci"]
+
+[tasks.analyze]
+commands = [["flutter", "analyze", "--no-pub"]]
+setup = ["dart", "example"]
+
+[tasks.parity-check]
+commands = [["dart", "run", "tool/check_dexie_parity.dart"]]
+setup = ["dart"]
+
+[tasks.test-tooling]
+commands = [["node", "--test", "tool/chainman_argv.test.mjs"], ["flutter", "test", "--no-pub", "tool/integration_report_test.dart"]]
+setup = ["dart"]
+
+[tasks.test-vm]
+commands = [["flutter", "test", "--no-pub"]]
+setup = ["dart"]
+depends_on = ["test-tooling"]
+
+[tasks.test-web]
+timeout_seconds = 600
+commands = [["./tool/test-web.sh"]]
+setup = ["dart"]
+cleanup_children = true
+
+[tasks.e2e-prepare-ci]
+commands = [["sh", "-c", "printf '%s\\n' 'Nix supplies the browser and matching ChromeDriver; no browser downloads are needed.'"]]
+profile = "host"
+
+[tasks.e2e]
+services = ["chrome-driver"]
+network_service = "chrome-driver"
+commands = [["./tool/e2e.sh"]]
+setup = ["dart", "example"]
+depends_on = ["bundle"]
+cleanup_children = true
+timeout_seconds = 600
+timeout_env = "E2E_TIMEOUT_SECONDS"
+shutdown_seconds = 15
+
+[tasks.check]
+depends_on = ["format-check", "parity-check", "analyze", "test-web", "test-tooling"]
+profile = "host"
+
+[tasks.ci-local]
+depends_on = ["bootstrap-ci", "format-check", "parity-check", "analyze", "test-web", "test-tooling", "e2e"]
+profile = "host"
+
+[tasks.publish-dry-run]
+commands = [["flutter", "pub", "publish", "--dry-run"]]
+setup = ["dart"]
+
+[tasks.publish]
+commands = [["flutter", "pub", "publish"]]
+setup = ["dart"]
+
+[tasks.hooks-install]
+commands = [["lefthook", "install"]]
+
+[tasks.clean]
+commands = [["./tool/clean.sh"]]
+exclusive = true
+cleanup_children = true
+
+# Flutter's SDK integration runner uses the standard WebDriver protocol. Chainman
+# owns this foreground service and its browser children for the E2E task lifetime.
+
+[tasks.format-write]
+commands = [["dart", "format", "lib", "test", "example/lib", "example/test", "example/integration_test", "example/test_driver", "tool"], ["bash", "-eu", "-c", "npx prettier --write \"**/*.{json,js,html,yaml}\""]]
+setup = ["javascript"]
+
+[tasks.format-check]
+commands = [["dart", "format", "--output=none", "--set-exit-if-changed", "lib", "test", "example/lib", "example/test", "example/integration_test", "example/test_driver", "tool"], ["npx", "prettier", "--check", "**/*.{json,js,html,yaml}"]]
+setup = ["javascript", "dart", "example"]
+
+[recipes]
+format-write = ["format-write"]
+format-check = ["format-check"]
+generate = ["bundle"]
+clean = ["clean"]
+setup = ["bootstrap"]
+verify-lite = ["check"]
+verify = ["ci-local"]

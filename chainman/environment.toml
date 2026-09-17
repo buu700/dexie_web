@@ -1,0 +1,8 @@
+[profiles.default]
+flake = "flake.nix#default"
+
+[profiles.services]
+flake = "flake.nix#services"
+
+[environment]
+pass = ["CHROME_EXECUTABLE", "CI", "E2E_TIMEOUT_SECONDS", "LANG", "LC_ALL"]

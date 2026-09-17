@@ -1,0 +1,64 @@
+[updates]
+profile = "default"
+eligibility = "resolver"
+minimum_age_days = 30
+verify_task = "ci-local"
+reconcile_tasks = ["bundle"]
+outputs = [
+    "assets/dexie.d.ts",
+    "assets/dexie.min.js",
+    "lib/src/dexie_sri.g.dart",
+    "package-lock.json",
+    "package.json",
+    "flake.lock",
+    "pubspec.yaml",
+    "pubspec.lock",
+    "example/pubspec.yaml",
+    "example/pubspec.lock",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+]
+
+[updates.adapters.nix]
+adapter = "nix"
+profile = "core"
+
+[[updates.adapters.nix.inputs]]
+directory = "."
+input = "nixpkgs"
+repository = "NixOS/nixpkgs"
+branch = "nixos-unstable"
+
+[[updates.adapters.nix.inputs]]
+directory = "."
+input = "flake-utils"
+repository = "numtide/flake-utils"
+branch = "main"
+
+[updates.adapters.js]
+adapter = "javascript"
+directory = "."
+profile = "default"
+manager = "npm"
+
+[updates.adapters.github]
+adapter = "actions"
+files = [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+profile = "core"
+
+[updates.adapters.flutter]
+adapter = "flutter"
+profile = "default"
+directories = [".", "example"]
+
+[[updates.steps]]
+resolve = "nix"
+
+[[updates.steps]]
+resolve = "js"
+
+[[updates.steps]]
+resolve = "flutter"
+
+[[updates.steps]]
+resolve = "github"
