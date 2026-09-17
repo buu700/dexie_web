@@ -3,6 +3,7 @@ schema = 3
 # Project-owned configuration; all module paths are relative to this root.
 include = [
   "chainman/environment.toml",
+  "chainman/hooks.toml",
   "chainman/services.toml",
   "chainman/setup.toml",
   "chainman/tasks.toml",

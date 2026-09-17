@@ -36,9 +36,6 @@ publish-dry-run *args:
 publish *args:
     @just chainman run publish -- "$@"
 
-setup-hooks *args:
-    @just chainman run hooks-install -- "$@"
-
 # Stable consumer bootstrap. Runtime behavior belongs to the pinned Git revision.
 [group("Chainman")]
 [positional-arguments]
@@ -167,7 +164,7 @@ format-check *args:
 [positional-arguments]
 format-staged *args:
     #!/bin/sh
-    exec just chainman recipe format-staged "$@"
+    exec just chainman format-staged "$@"
 
 [positional-arguments]
 format-write *args:
@@ -187,7 +184,7 @@ services-status *args:
 [positional-arguments]
 setup *args:
     #!/bin/sh
-    exec just chainman recipe setup "$@"
+    exec just chainman setup "$@"
 
 [positional-arguments]
 setup-status *args:
@@ -213,3 +210,8 @@ verify *args:
 verify-lite *args:
     #!/bin/sh
     exec just chainman recipe verify-lite "$@"
+
+[positional-arguments]
+hooks +args:
+    #!/bin/sh
+    exec just chainman hooks "$@"

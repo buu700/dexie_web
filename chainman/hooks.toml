@@ -1,0 +1,15 @@
+[hooks]
+enabled = true
+
+[formatters.dart]
+paths = ["*.dart"]
+profile = "formatter"
+write = ["dart", "format", "--"]
+check = ["dart", "format", "--output=none", "--set-exit-if-changed", "--"]
+
+[formatters.web]
+paths = ["*.json", "*.js", "*.html", "*.yaml"]
+exclude = ["assets/dexie.min.js", "assets/dexie.d.ts"]
+profile = "format-text"
+write = ["prettier", "--write", "--"]
+check = ["prettier", "--check", "--"]

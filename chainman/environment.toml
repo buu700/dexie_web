@@ -6,3 +6,7 @@ flake = "flake.nix#services"
 
 [environment]
 pass = ["CHROME_EXECUTABLE", "CI", "E2E_TIMEOUT_SECONDS", "LANG", "LC_ALL"]
+
+[profiles.formatter]
+flake = "flake.nix#formatter"
+entry_setup = []

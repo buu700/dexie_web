@@ -24,6 +24,7 @@
       {
         # Service entry and probes need the matching driver, not Flutter's SDK
         # startup commands or its shared tool lock.
+        devShells.formatter = pkgs.mkShellNoCC { packages = [ pkgs.flutter ]; };
         devShells.services = pkgs.mkShellNoCC {
           packages = [
             pkgs.chromedriver
@@ -38,7 +39,6 @@
             pkgs.flutter
             pkgs.nodejs_24
             pkgs.just
-            pkgs.lefthook
             pkgs.openssl
             pkgs.chromedriver
             pkgs.curl

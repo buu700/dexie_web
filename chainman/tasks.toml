@@ -65,9 +65,6 @@ setup = ["dart"]
 commands = [["flutter", "pub", "publish"]]
 setup = ["dart"]
 
-[tasks.hooks-install]
-commands = [["lefthook", "install"]]
-
 [tasks.clean]
 commands = [["./tool/clean.sh"]]
 exclusive = true

@@ -205,3 +205,15 @@ to update them independently.
 Chainman declarations are organized in [project-owned TOML modules](chainman/README.md),
 listed by `chainman.toml`. Use that guide to locate environments, setup, tasks and
 dependency policy.
+
+## Git hooks
+
+`just setup` prepares the declared setup groups and installs the shared lefthook
+preset. Use `just setup --no-hooks` for CI/disposable checkouts. `just hooks status`
+and `just hooks config` inspect ownership and policy; `just hooks install` installs
+hooks alone. Existing hooks/managers are preserved on conflict.
+
+Pre-commit formats staged content through declared small formatter profiles,
+without linting or application setup. Unstaged edits are preserved. Pre-push scans
+outgoing source history for suspicious Unicode; project-specific checks remain in
+the composed policy. See [chainman's hook guide](https://github.com/chainmandev/chainman/blob/master/docs/hooks.md).
