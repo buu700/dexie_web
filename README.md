@@ -4,12 +4,13 @@ A self-contained, zero-configuration [Dexie.js](https://dexie.org) (IndexedDB) w
 
 ## Development
 
-Development requires Git, Just, and either host Nix or Docker/Podman. The checked-in
-launcher verifies the pinned Chainman runtime in the Nix store. Host mode uses the
+Development requires Git, Just, and either host Nix or Docker/Podman. The small
+checked-in Just recipe fetches the exact Git revision in `chainman.lock` and verifies
+its objects; runtime and tool environments live in the Nix store. Host Nix uses the
 installed compatible Nix; container mode uses Chainman's digest-pinned, unmodified
 upstream Nix image. Flutter, Dart, Node, Chromium and the other tools come from the
 project flake. Container Nix is the default; select `CHAINMAN_MODE=host-nix` to use
-the installed host Nix.
+the installed host Nix. Container mode requires Git 2.42+ on the host.
 
 Use `just setup`, `just build`, `just test`, and `just verify`. `just test-web`,
 `just test-tooling` and `just e2e` select individual test lanes. `chainman.toml`
