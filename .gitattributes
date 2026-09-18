@@ -1,0 +1,4 @@
+
+
+# Keep exact runtime pins portable across Git EOL settings.
+chainman.lock text eol=lf
