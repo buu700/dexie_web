@@ -10,7 +10,7 @@ its objects; runtime and tool environments live in the Nix store. Host Nix uses 
 installed compatible Nix; container mode uses Chainman's digest-pinned, unmodified
 upstream Nix image. Flutter, Dart, Node, Chromium and the other tools come from the
 project flake. Container Nix is the default; select `CHAINMAN_MODE=host-nix` to use
-the installed host Nix. Container mode requires Git 2.42+ on the host.
+the installed host Nix.
 
 Use `just setup`, `just build`, `just test`, and `just verify`. `just test-web`,
 `just test-tooling` and `just e2e` select individual test lanes. `chainman.toml`

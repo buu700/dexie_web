@@ -7,10 +7,6 @@ setup = ["dart", "example"]
 depends_on = ["bundle"]
 profile = "host"
 
-[tasks.bootstrap]
-commands = [["lefthook", "install"]]
-depends_on = ["bootstrap-ci"]
-
 [tasks.analyze]
 commands = [["flutter", "analyze", "--no-pub"]]
 setup = ["dart", "example"]
@@ -86,6 +82,6 @@ format-write = ["format-write"]
 format-check = ["format-check"]
 generate = ["bundle"]
 clean = ["clean"]
-setup = ["bootstrap"]
+setup = ["bootstrap-ci"]
 verify-lite = ["check"]
 verify = ["ci-local"]
