@@ -34,6 +34,8 @@
 
         devShells.default = pkgs.mkShell {
           name = "dexie_web-dev";
+          # Development does not install into the dummy shell output.
+          NIX_NO_SELF_RPATH = "1";
 
           buildInputs = [
             pkgs.flutter

@@ -70,11 +70,11 @@ cleanup_children = true
 # owns this foreground service and its browser children for the E2E task lifetime.
 
 [tasks.format-write]
-commands = [["dart", "format", "lib", "test", "example/lib", "example/test", "example/integration_test", "example/test_driver", "tool"], ["bash", "-eu", "-c", "npx prettier --write \"**/*.{json,js,html,yaml}\""]]
+commands = [["dart", "format", "lib", "test", "example/lib", "example/integration_test", "example/test_driver", "tool"], ["bash", "-eu", "-c", "npx prettier --write \"**/*.{json,js,html,yaml}\""]]
 setup = ["javascript"]
 
 [tasks.format-check]
-commands = [["dart", "format", "--output=none", "--set-exit-if-changed", "lib", "test", "example/lib", "example/test", "example/integration_test", "example/test_driver", "tool"], ["npx", "prettier", "--check", "**/*.{json,js,html,yaml}"]]
+commands = [["dart", "format", "--output=none", "--set-exit-if-changed", "lib", "test", "example/lib", "example/integration_test", "example/test_driver", "tool"], ["npx", "prettier", "--check", "**/*.{json,js,html,yaml}"]]
 setup = ["javascript", "dart", "example"]
 
 [recipes]
