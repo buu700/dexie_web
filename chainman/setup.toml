@@ -1,7 +1,7 @@
 [setup.javascript]
-inputs = ["package.json", "package-lock.json"]
-artifacts = ["node_modules/dexie/dist/dexie.min.js", "node_modules/.package-lock.json"]
-commands = [["npm", "ci", "--ignore-scripts"]]
+pnpm = true
+inputs = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]
+artifacts = ["node_modules/dexie/dist/dexie.min.js", "node_modules/.modules.yaml"]
 
 [setup.dart]
 inputs = ["pubspec.yaml", "pubspec.lock"]

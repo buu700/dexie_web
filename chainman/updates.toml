@@ -8,7 +8,8 @@ outputs = [
     "assets/dexie.d.ts",
     "assets/dexie.min.js",
     "lib/src/dexie_sri.g.dart",
-    "package-lock.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
     "package.json",
     "flake.lock",
     "pubspec.yaml",
@@ -39,7 +40,18 @@ branch = "main"
 adapter = "javascript"
 directory = "."
 profile = "default"
-manager = "npm"
+# The JavaScript adapter's default manager is pnpm.
+
+[updates.adapters.pnpm]
+adapter = "toolchain"
+profile = "default"
+
+[[updates.adapters.pnpm.tools]]
+provider = "npm"
+name = "pnpm"
+command = ["pnpm", "--version"]
+version_pattern = '^(?P<version>\d+\.\d+\.\d+)$'
+pins = [{ file = "package.json", pointer = ["packageManager"], value = "pnpm@{version}" }]
 
 [updates.adapters.github]
 adapter = "actions"
@@ -53,6 +65,9 @@ directories = [".", "example"]
 
 [[updates.steps]]
 resolve = "nix"
+
+[[updates.steps]]
+resolve = "pnpm"
 
 [[updates.steps]]
 resolve = "js"

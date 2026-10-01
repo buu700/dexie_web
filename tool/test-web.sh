@@ -15,8 +15,11 @@ if [[ -z "$CHROME_EXECUTABLE" ]]; then
     fi
   done
 fi
-if [[ -z "$CHROME_EXECUTABLE" ]]; then
-  echo "No Chromium/Chrome binary found. Set CHROME_EXECUTABLE." >&2
+if [[ -z "$CHROME_EXECUTABLE" || ! -x "$CHROME_EXECUTABLE" ]]; then
+  echo "No executable Chromium/Chrome binary found. Set CHROME_EXECUTABLE." >&2
   exit 1
 fi
-CHROME_EXECUTABLE="$CHROME_EXECUTABLE" flutter test --no-pub --platform=chrome
+printf 'Browser: %s\n' "$CHROME_EXECUTABLE"
+"$CHROME_EXECUTABLE" --version
+printf '%s\n' 'Starting Flutter browser test compilation and launch'
+CHROME_EXECUTABLE="$CHROME_EXECUTABLE" exec flutter test --no-pub --platform=chrome --verbose --reporter=expanded "$@"

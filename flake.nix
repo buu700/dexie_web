@@ -40,6 +40,7 @@
           buildInputs = [
             pkgs.flutter
             pkgs.nodejs_24
+            (pkgs.pnpm.override { nodejs = pkgs.nodejs_24; })
             pkgs.just
             pkgs.openssl
             pkgs.chromedriver

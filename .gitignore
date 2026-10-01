@@ -32,6 +32,7 @@ migrate_working_dir/
 node_modules/
 /.chainman/
 /.cache/
+test-results/
 example/test-results/
 example/playwright-report/
 example/test_bundle.dart

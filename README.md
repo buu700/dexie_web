@@ -14,7 +14,7 @@ the installed host Nix.
 
 Use `just setup`, `just build`, `just test`, and `just verify`. `just test-web`,
 `just test-tooling` and `just e2e` select individual test lanes. `chainman.toml`
-declares frozen npm, root Dart and example Dart setup
+declares frozen pnpm, root Dart and example Dart setup
 groups. Chainman verifies their inputs and readiness artifacts and holds setup
 leases while tasks run. Download caches are shared; `just cache-status` and
 `just cache-prune` expose the common cache policy.
@@ -24,8 +24,8 @@ required groups first and ask before repairing them. Without a controlling termi
 run setup explicitly or authorize CI repairs with `CHAINMAN_SETUP=auto`.
 `CHAINMAN_SETUP=error` forbids implicit repairs. Inspect failures with
 `just chainman setup-status`; use `just chainman setup javascript`, `dart`, or
-`example` for focused recovery. These groups retain npm/Dart installation and artifact
-checks; they do not use pnpm.
+`example` for focused recovery. The JavaScript group uses Chainman’s reusable pnpm setup to enforce the exact
+Nix-supplied `packageManager` version and validate installed dependencies.
 
 E2E uses Flutter's SDK `integration_test` runner in profile mode with a Nix-pinned
 Chromium/ChromeDriver pair. Chainman starts ChromeDriver, waits for readiness, and
@@ -51,12 +51,15 @@ generates and formats in an isolated candidate, checks it, then commits the resu
 `just format-write` formats in place. `just verify` includes formatting and the full
 browser gate; `just verify-lite` omits the SDK integration-test lane.
 
-`just deps-update-js` selects npm dependencies and retains the runtime pin;
+`just deps-update-js` selects pnpm dependencies and retains the runtime pin;
 `just deps-update` updates all project dependencies and the Chainman pin transactionally.
 Use `just deps-update --skip-chainman` to retain the runtime during a full project update. Shared adapters
-update Nix inputs, npm dependencies, Dart packages and pinned GitHub Actions.
+update Nix inputs, pnpm dependencies, Dart packages and pinned GitHub Actions.
 New identities require 30 days of age and immutable registry evidence. The project
-retains npm and regenerates Dexie assets and SRI source before full verification.
+uses the JavaScript adapter’s default pnpm manager and regenerates Dexie assets
+and SRI source before full verification. A toolchain adapter probes pnpm after the
+Nix update and reconciles `packageManager`, so a normal `just deps-update` updates
+the manager and its dependency graph together.
 Updates commit the verified candidate by default; use `commit=off` to retain it
 without committing or `mode=dry-run` to leave the original untouched.
 `just chainman-update` selects a runtime-only update, including its container pin.

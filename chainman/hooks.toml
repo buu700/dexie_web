@@ -8,7 +8,7 @@ write = ["dart", "format", "--"]
 check = ["dart", "format", "--output=none", "--set-exit-if-changed", "--"]
 
 [formatters.web]
-paths = ["*.json", "*.js", "*.html", "*.yaml"]
+paths = ["*.json", "*.js", "*.mjs", "*.html", "*.yaml", "*.yml"]
 exclude = ["assets/dexie.min.js", "assets/dexie.d.ts"]
 profile = "format-text"
 write = ["prettier", "--write", "--"]

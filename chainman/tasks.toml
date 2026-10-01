@@ -16,7 +16,7 @@ commands = [["dart", "run", "tool/check_dexie_parity.dart"]]
 setup = ["dart"]
 
 [tasks.test-tooling]
-commands = [["node", "--test", "tool/chainman_argv.test.mjs"], ["flutter", "test", "--no-pub", "tool/integration_report_test.dart"]]
+commands = [["node", "--test", "tool/chainman_argv.test.mjs", "tool/test_web_wrapper.test.mjs"], ["flutter", "test", "--no-pub", "tool/integration_report_test.dart"]]
 setup = ["dart"]
 
 [tasks.test-vm]
@@ -46,11 +46,11 @@ timeout_env = "E2E_TIMEOUT_SECONDS"
 shutdown_seconds = 15
 
 [tasks.check]
-depends_on = ["format-check", "parity-check", "analyze", "test-web", "test-tooling"]
+depends_on = ["format-check", "parity-check", "analyze", "test-tooling", "test-web"]
 profile = "host"
 
 [tasks.ci-local]
-depends_on = ["bootstrap-ci", "format-check", "parity-check", "analyze", "test-web", "test-tooling", "e2e"]
+depends_on = ["bootstrap-ci", "format-check", "parity-check", "analyze", "test-tooling", "test-web", "e2e"]
 profile = "host"
 
 [tasks.publish-dry-run]
@@ -70,11 +70,11 @@ cleanup_children = true
 # owns this foreground service and its browser children for the E2E task lifetime.
 
 [tasks.format-write]
-commands = [["dart", "format", "lib", "test", "example/lib", "example/integration_test", "example/test_driver", "tool"], ["bash", "-eu", "-c", "npx prettier --write \"**/*.{json,js,html,yaml}\""]]
+commands = [["dart", "format", "lib", "test", "example/lib", "example/integration_test", "example/test_driver", "tool"], ["bash", "-eu", "-c", "pnpm exec prettier --write \"**/*.{json,js,mjs,html,yaml,yml}\""]]
 setup = ["javascript"]
 
 [tasks.format-check]
-commands = [["dart", "format", "--output=none", "--set-exit-if-changed", "lib", "test", "example/lib", "example/integration_test", "example/test_driver", "tool"], ["npx", "prettier", "--check", "**/*.{json,js,html,yaml}"]]
+commands = [["dart", "format", "--output=none", "--set-exit-if-changed", "lib", "test", "example/lib", "example/integration_test", "example/test_driver", "tool"], ["pnpm", "exec", "prettier", "--check", "**/*.{json,js,mjs,html,yaml,yml}"]]
 setup = ["javascript", "dart", "example"]
 
 [recipes]

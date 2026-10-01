@@ -3,3 +3,4 @@ assets/dexie.d.ts
 node_modules/
 build/
 .dart_tool/
+pnpm-lock.yaml

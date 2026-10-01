@@ -1,0 +1,10 @@
+packages: []
+
+# Chainman applies the same 30-day policy when resolving dependency updates.
+minimumReleaseAge: 43200
+minimumReleaseAgeIgnoreMissingTime: false
+
+# Dependencies in this bundle do not need install scripts.
+ignoreScripts: true
+managePackageManagerVersions: false
+packageManagerStrictVersion: true
