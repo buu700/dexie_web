@@ -3,7 +3,7 @@ profile = "default"
 eligibility = "resolver"
 minimum_age_days = 30
 verify_task = "ci-local"
-reconcile_tasks = ["bundle"]
+reconcile_tasks = ["bundle", "deps-format"]
 outputs = [
     "assets/dexie.d.ts",
     "assets/dexie.min.js",

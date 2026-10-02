@@ -57,7 +57,7 @@ Use `just deps-update --skip-chainman` to retain the runtime during a full proje
 update Nix inputs, pnpm dependencies, Dart packages and pinned GitHub Actions.
 New identities require 30 days of age and immutable registry evidence. The project
 uses the JavaScript adapter’s default pnpm manager and regenerates Dexie assets
-and SRI source before full verification. A toolchain adapter probes pnpm after the
+and SRI source, then formats updated manifests before full verification. A toolchain adapter probes pnpm after the
 Nix update and reconciles `packageManager`, so a normal `just deps-update` updates
 the manager and its dependency graph together.
 Updates commit the verified candidate by default; use `commit=off` to retain it

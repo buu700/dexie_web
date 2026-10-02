@@ -2,6 +2,12 @@
 commands = [["./tool/bundle.sh"]]
 setup = ["javascript"]
 
+# Dependency resolvers may serialize manifests differently from Prettier.
+# Reconcile only declared update outputs before verification freezes the candidate.
+[tasks.deps-format]
+commands = [["pnpm", "exec", "prettier", "--write", "package.json", "pnpm-workspace.yaml", "pubspec.yaml", "example/pubspec.yaml", "analysis_options.yaml", "example/analysis_options.yaml", ".github/workflows/*.{yml,yaml}"]]
+setup = ["javascript"]
+
 [tasks.bootstrap-ci]
 setup = ["dart", "example"]
 depends_on = ["bundle"]
