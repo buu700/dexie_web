@@ -20,9 +20,10 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
-
-      - name: Cache Nix store
-        uses: DeterminateSystems/magic-nix-cache-action@55718cd9ebf1737a061487d5ada21abf31e99a98 # main
+        with:
+          # Bound download concurrency on hosted runners and use the upstream cache.
+          extra-conf: |
+            http-connections = 8
 
       - name: Check command entrypoints
         run: nix shell --inputs-from . nixpkgs#nodejs_24 nixpkgs#just --command node --test tool/chainman_argv.test.mjs tool/test_web_wrapper.test.mjs

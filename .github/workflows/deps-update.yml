@@ -27,9 +27,10 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
-
-      - name: Cache Nix store
-        uses: DeterminateSystems/magic-nix-cache-action@55718cd9ebf1737a061487d5ada21abf31e99a98 # main
+        with:
+          # Bound download concurrency on hosted runners and use the upstream cache.
+          extra-conf: |
+            http-connections = 8
 
       - name: Resolve, reconcile and verify dependencies
         shell: bash
