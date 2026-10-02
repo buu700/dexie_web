@@ -116,7 +116,7 @@ Future<void> ensureDexieInitialized({DexieLoadPolicy? policy}) async {
       _dexieLoaded = true;
       _loadCompleter = null;
       completer.complete();
-      return completer.future;
+      return;
     }
 
     if (effectivePolicy == DexieLoadPolicy.strictGlobal) {
@@ -138,7 +138,7 @@ Future<void> ensureDexieInitialized({DexieLoadPolicy? policy}) async {
       _dexieLoaded = true;
       _loadCompleter = null;
       completer.complete();
-      return completer.future;
+      return;
     }
 
     _removeDexieScriptElements();
