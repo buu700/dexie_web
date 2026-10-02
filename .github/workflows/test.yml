@@ -2,8 +2,13 @@ name: Test dexie_web
 
 on:
   push:
+    branches-ignore: [automation/deps-update]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
