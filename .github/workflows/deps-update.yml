@@ -42,6 +42,8 @@ jobs:
           # Bound download concurrency on hosted runners and use the upstream cache.
           extra-conf: |
             http-connections = 8
+            # Nested task launches can contend on the optional SQLite eval cache.
+            eval-cache = false
 
       - name: Resolve, reconcile and verify dependencies
         shell: bash

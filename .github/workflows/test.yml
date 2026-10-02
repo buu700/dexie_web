@@ -28,6 +28,8 @@ jobs:
           # Bound download concurrency on hosted runners and use the upstream cache.
           extra-conf: |
             http-connections = 8
+            # Nested task launches can contend on the optional SQLite eval cache.
+            eval-cache = false
 
       - name: Check command entrypoints
         run: nix shell --inputs-from . nixpkgs#nodejs_24 nixpkgs#just --command node --test tool/chainman_argv.test.mjs tool/test_web_wrapper.test.mjs tool/update_diagnostics.test.mjs
