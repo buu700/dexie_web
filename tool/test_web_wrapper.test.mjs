@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const bashExecutable = spawnSync("sh", ["-c", "command -v bash"], {
   encoding: "utf8",
@@ -42,7 +43,7 @@ for (const exit of [0, 41]) {
     ];
     const result = spawnSync(
       bashExecutable,
-      [new URL("./test-web.sh", import.meta.url).pathname, ...args],
+      [fileURLToPath(new URL("./test-web.sh", import.meta.url)), ...args],
       {
         cwd: root,
         env: {
@@ -83,7 +84,7 @@ test("invalid explicit browser fails before starting Flutter", (t) => {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = spawnSync(
     bashExecutable,
-    [new URL("./test-web.sh", import.meta.url).pathname],
+    [fileURLToPath(new URL("./test-web.sh", import.meta.url))],
     {
       env: { ...process.env, CHROME_EXECUTABLE: join(root, "missing") },
       encoding: "utf8",

@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const opaqueArguments = [
   "two words",
@@ -128,7 +129,7 @@ test("default lists recipes without Just on PATH", (t) => {
   symlinkSync(bashExecutable, join(root, "bash"));
   const result = spawnSync(
     justExecutable,
-    ["--justfile", new URL("../justfile", import.meta.url).pathname],
+    ["--justfile", fileURLToPath(new URL("../justfile", import.meta.url))],
     {
       env: { ...process.env, PATH: root },
       encoding: "utf8",
