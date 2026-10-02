@@ -16,7 +16,7 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        isLinux = pkgs.stdenv.isLinux;
+        isLinux = pkgs.stdenv.hostPlatform.isLinux;
         linuxChromeExecutable = if isLinux then "${pkgs.chromium}/bin/chromium" else "";
         chromiumDisplayVersion =
           if isLinux then pkgs.chromium.version else "host Chrome (must match Nix ChromeDriver)";
@@ -40,7 +40,7 @@
           buildInputs = [
             pkgs.flutter
             pkgs.nodejs_24
-            (pkgs.pnpm.override { nodejs = pkgs.nodejs_24; })
+            (pkgs.pnpm.override { nodejs-slim = pkgs.nodejs_24; })
             pkgs.just
             pkgs.openssl
             pkgs.chromedriver

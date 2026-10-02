@@ -4,7 +4,7 @@
  *
  * By David Fahlander, david.fahlander@gmail.com
  *
- * Version 4.3.0, Sat Dec 20 2025
+ * Version 4.4.5, Fri Aug 14 2026
  *
  * https://dexie.org
  *
@@ -50,10 +50,10 @@ export interface DexieEventSet {
 	(eventName: string): DexieEvent; // To be able to unsubscribe.
 	addEventType(eventName: string, chainFunction?: (f1: Function, f2: Function) => Function, defaultFunction?: Function): DexieEvent;
 	addEventType(events: {
-		[eventName: string]: ("asap" | [
+		[eventName: string]: "asap" | [
 			(f1: Function, f2: Function) => Function,
 			Function
-		]);
+		];
 	}): DexieEvent;
 }
 export interface TransactionEvents extends DexieEventSet {
@@ -601,7 +601,7 @@ export interface DBCorePutRequest {
 		keys: any[];
 		changeSpecs: {
 			[keyPath: string]: any;
-		}[]; // changeSpec per key.  
+		}[]; // changeSpec per key.
 	};
 	/** @deprecated Will always get results since 3.1.0-alpha.5 */
 	wantResults?: boolean;
@@ -643,6 +643,7 @@ export interface DBCoreQueryRequest {
 	values?: boolean;
 	limit?: number;
 	query: DBCoreQuery;
+	direction?: "next" | "nextunique" | "prev" | "prevunique";
 	obsSet?: ObservabilitySet;
 }
 export interface DBCoreQueryResponse {
@@ -859,7 +860,7 @@ export interface Dexie {
 	transaction<U>(mode: TransactionMode, table: string | Table, table2: string | Table, scope: (trans: TXWithTables<this>) => PromiseLike<U> | U): PromiseExtended<U>;
 	transaction<U>(mode: TransactionMode, table: string | Table, table2: string | Table, table3: string | Table, scope: (trans: TXWithTables<this>) => PromiseLike<U> | U): PromiseExtended<U>;
 	transaction<U>(mode: TransactionMode, table: string | Table, table2: string | Table, table3: string | Table, table4: string | Table, scope: (trans: TXWithTables<this>) => PromiseLike<U> | U): PromiseExtended<U>;
-	transaction<U>(mode: TransactionMode, table: string | Table, table2: string | Table, table3: string | Table, table5: string | Table, scope: (trans: TXWithTables<this>) => PromiseLike<U> | U): PromiseExtended<U>;
+	transaction<U>(mode: TransactionMode, table: string | Table, table2: string | Table, table3: string | Table, table4: string | Table, table5: string | Table, scope: (trans: TXWithTables<this>) => PromiseLike<U> | U): PromiseExtended<U>;
 	close(closeOptions?: {
 		disableAutoOpen: boolean;
 	}): void;
@@ -1119,6 +1120,7 @@ export interface DexieOptions {
 	};
 	chromeTransactionDurability?: ChromeTransactionDurability;
 	cache?: "immutable" | "cloned" | "disabled";
+	maxConnections?: number;
 }
 export interface DexieConstructor extends DexieExceptionClasses {
 	new (databaseName: string, options?: DexieOptions): Dexie;
@@ -1199,7 +1201,7 @@ export interface _Collection<T, TKey> extends Collection<T, TKey> {
 }
 // Besides being the only exported value, let Dexie also be
 // a namespace for types...
-export declare module Dexie {
+export declare namespace Dexie {
 	// The "Dexie.Promise" type.
 	type Promise<T = any> = PromiseExtended<T>; // Because many samples have been Dexie.Promise.
 	// The "Dexie.Table" interface. Same as named exported interface Table.

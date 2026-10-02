@@ -154,7 +154,7 @@ final adults = await friends
     .toList();
 ```
 
-### Parity Coverage (Dexie 4.3 Runtime Surfaces)
+### Parity Coverage
 
 `dexie_web` covers the primary runtime query/mutation APIs for:
 

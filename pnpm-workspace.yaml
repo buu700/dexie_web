@@ -8,3 +8,4 @@ minimumReleaseAgeIgnoreMissingTime: false
 ignoreScripts: true
 managePackageManagerVersions: false
 packageManagerStrictVersion: true
+minimumReleaseAgeExclude: []
