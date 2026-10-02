@@ -27,6 +27,11 @@ outputs = [
 adapter = "nix"
 profile = "core"
 
+# A Nix refresh can change both the package manager and Flutter's SDK constraints.
+# Keep ordinary JavaScript dependency selection separate from SDK reconciliation.
+[updates.target_groups]
+nix = ["nix", "pnpm", "flutter"]
+
 [[updates.adapters.nix.inputs]]
 directory = "."
 input = "nixpkgs"

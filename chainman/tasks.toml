@@ -22,7 +22,7 @@ commands = [["dart", "run", "tool/check_dexie_parity.dart"]]
 setup = ["dart"]
 
 [tasks.test-tooling]
-commands = [["node", "--test", "tool/chainman_argv.test.mjs", "tool/test_web_wrapper.test.mjs"], ["flutter", "test", "--no-pub", "tool/integration_report_test.dart"]]
+commands = [["node", "--test", "tool/chainman_argv.test.mjs", "tool/test_web_wrapper.test.mjs", "tool/update_diagnostics.test.mjs"], ["flutter", "test", "--no-pub", "tool/integration_report_test.dart"]]
 setup = ["dart"]
 
 [tasks.test-vm]

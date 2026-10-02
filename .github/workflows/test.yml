@@ -30,7 +30,7 @@ jobs:
             http-connections = 8
 
       - name: Check command entrypoints
-        run: nix shell --inputs-from . nixpkgs#nodejs_24 nixpkgs#just --command node --test tool/chainman_argv.test.mjs tool/test_web_wrapper.test.mjs
+        run: nix shell --inputs-from . nixpkgs#nodejs_24 nixpkgs#just --command node --test tool/chainman_argv.test.mjs tool/test_web_wrapper.test.mjs tool/update_diagnostics.test.mjs
 
       - name: Verify
         env:

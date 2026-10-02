@@ -2,6 +2,12 @@ name: Update dependencies
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Update all dependencies or only the Nix SDK and its dependent pins
+        type: choice
+        default: all
+        options: [all, nix]
   push:
     branches: [automation/deps-update]
 
@@ -21,6 +27,7 @@ jobs:
       CHAINMAN_SETUP: auto
       E2E_TIMEOUT_SECONDS: "900"
       GITHUB_TOKEN: ${{ github.token }}
+      UPDATE_RECIPE: ${{ inputs.target == 'nix' && 'deps-update-nix' || 'deps-update' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,22 +50,15 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           mkdir -p test-results
           nix shell --inputs-from . nixpkgs#dbus --command ./tool/ci-session.sh \
-            nix run --inputs-from . nixpkgs#just -- deps-update --json \
+            nix run --inputs-from . nixpkgs#just -- "$UPDATE_RECIPE" --json \
             2> >(tee test-results/deps-update.log >&2) | tee test-results/deps-update.json
           git diff --binary "$GITHUB_SHA" HEAD > test-results/deps-update.patch
 
-      - name: Preserve failed candidate for review
+      - name: Preserve failed candidate and browser diagnostics
         if: failure()
         shell: bash
         run: |
-          mkdir -p test-results
-          for candidate in "${XDG_CACHE_HOME:-$HOME/.cache}"/chainman/updates/candidate.*/candidate \
-            "${XDG_CACHE_HOME:-$HOME/.cache}"/chainman/updates/v1/candidate.*/candidate; do
-            if [ -d "$candidate/.git" ]; then
-              git -C "$candidate" -c core.hooksPath=/dev/null -c core.fsmonitor=false \
-                diff --binary HEAD > "test-results/$(basename "$(dirname "$candidate")").patch"
-            fi
-          done
+          ./tool/collect-update-diagnostics.sh
 
       - name: Upload dependency update and diagnostics
         if: always()

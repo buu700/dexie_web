@@ -70,6 +70,9 @@ uses the JavaScript adapter’s default pnpm manager and regenerates Dexie asset
 and SRI source, then formats updated manifests before full verification. A toolchain adapter probes pnpm after the
 Nix update and reconciles `packageManager`, so a normal `just deps-update` updates
 the manager and its dependency graph together.
+`just deps-update-nix` groups the Nix refresh with pnpm version reconciliation and
+Flutter lock updates. Use `just deps-update-js` to select ordinary JavaScript
+dependency releases separately.
 Updates commit the verified candidate by default; use `commit=off` to retain it
 without committing or `mode=dry-run` to leave the original untouched.
 `just chainman-update` selects a runtime-only update, including its container pin.
@@ -78,7 +81,10 @@ The **Update dependencies** Actions workflow runs the default `deps-update` comm
 on a disposable runner, including full verification, and uploads its committed
 changes as `deps-update.patch` alongside the JSON result and logs. Start it manually
 in Actions or push a maintenance candidate to `automation/deps-update` when local
-SDK work would be expensive. Failed candidates are uploaded separately for review.
+SDK work would be expensive. The manual workflow's `target` defaults to `all`;
+select `nix` to exercise the coordinated SDK update without selecting JavaScript
+or GitHub Actions releases. Retained failed candidates are uploaded with their
+patches and browser diagnostics under `test-results/candidates/` for review.
 
 `dexie_web` eliminates the friction of using IndexedDB in Flutter Web. It bundles the Dexie JS library directly into the package assets and automatically injects it at run-time with Subresource Integrity (SRI) enforced. No external CDN dependencies, no manual `<script>` tags in your `index.html`, and fully WASM-ready using modern `dart:js_interop`.
 

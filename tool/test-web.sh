@@ -15,6 +15,9 @@ if [[ -z "$CHROME_EXECUTABLE" ]]; then
     fi
   done
 fi
+if [[ -n "$CHROME_EXECUTABLE" && "$CHROME_EXECUTABLE" != */* ]]; then
+  CHROME_EXECUTABLE="$(command -v -- "$CHROME_EXECUTABLE" || true)"
+fi
 if [[ -z "$CHROME_EXECUTABLE" || ! -x "$CHROME_EXECUTABLE" ]]; then
   echo "No executable Chromium/Chrome binary found. Set CHROME_EXECUTABLE." >&2
   exit 1
