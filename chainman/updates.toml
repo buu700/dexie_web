@@ -12,6 +12,9 @@ outputs = [
     "pnpm-workspace.yaml",
     "package.json",
     "flake.lock",
+    # Flutter SDK updates migrate analyzer exclusions during pub get.
+    "analysis_options.yaml",
+    "example/analysis_options.yaml",
     "pubspec.yaml",
     "pubspec.lock",
     "example/pubspec.yaml",
