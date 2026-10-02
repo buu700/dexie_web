@@ -42,7 +42,7 @@ jobs:
           git config user.name 'Dependency maintenance'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           mkdir -p test-results
-          nix shell --inputs-from . nixpkgs#dbus --command dbus-run-session -- \
+          nix shell --inputs-from . nixpkgs#dbus --command ./tool/ci-session.sh \
             nix run --inputs-from . nixpkgs#just -- deps-update --json \
             2> >(tee test-results/deps-update.log >&2) | tee test-results/deps-update.json
           git diff --binary "$GITHUB_SHA" HEAD > test-results/deps-update.patch

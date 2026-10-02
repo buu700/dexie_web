@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p test-results
-          nix shell --inputs-from . nixpkgs#dbus --command dbus-run-session -- \
+          nix shell --inputs-from . nixpkgs#dbus --command ./tool/ci-session.sh \
             nix run --inputs-from . nixpkgs#just -- verify 2>&1 | tee test-results/verify.log
 
       - name: Upload verification diagnostics on failure

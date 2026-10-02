@@ -39,7 +39,8 @@ internal service-worker configuration from producing a false CLI deprecation
 notice. Explicit `flutter build web --pwa-strategy=...` use still warns. Remove
 the patch when the pinned SDK makes this distinction itself; patch application
 fails on incompatible SDK changes so dependency updates must verify it.
-Linux CI runs verification and dependency maintenance inside `dbus-run-session`,
+Linux CI uses `tool/ci-session.sh` to run verification and dependency maintenance
+inside `dbus-run-session` with the Nix package's session configuration,
 and Chainman forwards the session address to Chromium. The bus exits with the
 command and does not depend on a desktop session on the runner.
 
