@@ -64,6 +64,12 @@ Updates commit the verified candidate by default; use `commit=off` to retain it
 without committing or `mode=dry-run` to leave the original untouched.
 `just chainman-update` selects a runtime-only update, including its container pin.
 
+The **Update dependencies** Actions workflow runs the default `deps-update` command
+on a disposable runner, including full verification, and uploads its committed
+changes as `deps-update.patch` alongside the JSON result and logs. Start it manually
+in Actions or push a maintenance candidate to `automation/deps-update` when local
+SDK work would be expensive. Failed candidates are uploaded separately for review.
+
 `dexie_web` eliminates the friction of using IndexedDB in Flutter Web. It bundles the Dexie JS library directly into the package assets and automatically injects it at run-time with Subresource Integrity (SRI) enforced. No external CDN dependencies, no manual `<script>` tags in your `index.html`, and fully WASM-ready using modern `dart:js_interop`.
 
 For avoidance of doubt, `dexie_web` is web-only at run-time. It can be imported on non-web platforms for shared code, but calling its APIs off-web throws `UnsupportedError`.
