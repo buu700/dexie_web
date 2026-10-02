@@ -34,6 +34,15 @@ remain; an independent inventory and a per-run nonce require fresh completion of
 every case. No global CLI, npm install in Pub packages, or browser download is
 needed. The deadline is 600 seconds; `E2E_TIMEOUT_SECONDS` accepts 1–86400 seconds.
 
+The Nix SDK applies `nix/patches/flutter-pwa-cli-warning.patch` to keep Flutter's
+internal service-worker configuration from producing a false CLI deprecation
+notice. Explicit `flutter build web --pwa-strategy=...` use still warns. Remove
+the patch when the pinned SDK makes this distinction itself; patch application
+fails on incompatible SDK changes so dependency updates must verify it.
+Linux CI runs verification and dependency maintenance inside `dbus-run-session`,
+and Chainman forwards the session address to Chromium. The bus exits with the
+command and does not depend on a desktop session on the runner.
+
 ChromeDriver and its readiness probe use a minimal service profile from the same
 Nix lock, avoiding Flutter SDK startup and tool locks on every probe. WebDriver
 remains private to the E2E task's shared container network namespace.

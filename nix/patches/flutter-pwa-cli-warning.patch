@@ -1,0 +1,27 @@
+--- a/packages/flutter_tools/lib/src/commands/build_web.dart
++++ b/packages/flutter_tools/lib/src/commands/build_web.dart
+@@ -296,6 +296,7 @@
+       buildInfo,
+       ServiceWorkerStrategy.fromCliName(stringArg('pwa-strategy')),
+       compilerConfigs: compilerConfigs,
++      warnOnDeprecatedPwaStrategy: argResults!.wasParsed('pwa-strategy'),
+       baseHref: baseHref,
+       staticAssetsUrl: staticAssetsUrl,
+       outputDirectoryPath: outputDirectoryPath,
+--- a/packages/flutter_tools/lib/src/web/compile.dart
++++ b/packages/flutter_tools/lib/src/web/compile.dart
+@@ -71,12 +71,13 @@
+     BuildInfo buildInfo,
+     ServiceWorkerStrategy? serviceWorkerStrategy, {
+     required List<WebCompilerConfig> compilerConfigs,
++    bool warnOnDeprecatedPwaStrategy = false,
+     String? baseHref,
+     String? staticAssetsUrl,
+     String? outputDirectoryPath,
+     Map<String, String> webDefines = const <String, String>{},
+   }) async {
+-    if (serviceWorkerStrategy != null) {
++    if (warnOnDeprecatedPwaStrategy && serviceWorkerStrategy != null) {
+       _logger.printWarning(
+         'The --pwa-strategy option is deprecated and will be removed in a future Flutter release.\n'
+         'For more information, see: https://github.com/flutter/flutter/issues/156910',

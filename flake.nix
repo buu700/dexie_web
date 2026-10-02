@@ -16,6 +16,15 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        # Flutter's profile runner disables service workers internally. Warn only
+        # when a user explicitly supplies the deprecated CLI option.
+        flutter = pkgs.flutter.wrapFlutter (
+          pkgs.flutter.unwrapped.override {
+            patches = (pkgs.flutter.unwrapped.patches or [ ]) ++ [
+              ./nix/patches/flutter-pwa-cli-warning.patch
+            ];
+          }
+        );
         isLinux = pkgs.stdenv.hostPlatform.isLinux;
         linuxChromeExecutable = if isLinux then "${pkgs.chromium}/bin/chromium" else "";
         chromiumDisplayVersion =
@@ -24,7 +33,7 @@
       {
         # Service entry and probes need the matching driver, not Flutter's SDK
         # startup commands or its shared tool lock.
-        devShells.formatter = pkgs.mkShellNoCC { packages = [ pkgs.flutter ]; };
+        devShells.formatter = pkgs.mkShellNoCC { packages = [ flutter ]; };
         devShells.services = pkgs.mkShellNoCC {
           packages = [
             pkgs.chromedriver
@@ -38,7 +47,7 @@
           NIX_NO_SELF_RPATH = "1";
 
           buildInputs = [
-            pkgs.flutter
+            flutter
             pkgs.nodejs_24
             (pkgs.pnpm.override { nodejs-slim = pkgs.nodejs_24; })
             pkgs.just
@@ -51,7 +60,7 @@
           ++ pkgs.lib.optionals isLinux [ pkgs.chromium ];
 
           # dart run must resolve Flutter SDK dependencies against this same SDK.
-          FLUTTER_ROOT = "${pkgs.flutter}";
+          FLUTTER_ROOT = "${flutter}";
           FLUTTER_WEB_BROWSER = "chromium";
           shellHook = ''
             if [[ "${if isLinux then "1" else "0"}" == "1" ]]; then
